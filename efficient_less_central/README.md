@@ -1,4 +1,4 @@
-## Working on a first implementation of [*Efficient and Less Centralized Federated Learning*](https://arxiv.org/pdf/2106.06627)
+## A first implementation of [*Efficient and Less Centralized Federated Learning*](https://arxiv.org/pdf/2106.06627)
 
 This uses an algorithm they call "FedP2P" which has many things in common with our discussed strategy. It works by:
   - Selecting L out of N devices (randomly) to recieve the global model at each update
