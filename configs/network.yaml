@@ -1,0 +1,16 @@
+
+num_rounds: 1 # number of FL rounds in the experiment
+num_clients: 10 # number of total clients available (this is also the number of partitions we need to create)
+batch_size: 20 # batch size to use by clients during training
+num_classes: 10 # number of classes in our dataset (we use MNIST)
+num_clients_per_round_fit: 10 # number of clients to involve in each fit round
+num_clients_per_round_eval: 10 # number of clients to involve in each evaluate round
+config_fit: # a config that each client will receive
+  lr: 0.01 # learning rate to use by the clients
+  momentum: 0.9 # momentum used by SGD optimiser on the client side
+  epochs: 1 # number of training epochs each clients does in a fit() round
+  path: '~/configs/neighbor_list/neighbors.yaml' #path to adjacency list file
+
+default:
+  - model: net
+  - neighbor_lists: neighbors

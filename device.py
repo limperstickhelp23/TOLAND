@@ -23,7 +23,7 @@ class Honey2Device(flwr.client.NumPyClient):
     @device_id - id of device set by cloud
     @tau - # training rounds
     @alpha - # Aggregation rounds
-    @peers - set of neighbors of type flwr.Client
+    @peers - set of neighbors of type flwr.ClientProxy
     """
     def __init__(self, device_id, trainloader, valloader, model_cfg, peers: List['Honey2Device']):
         super().__init__()
@@ -31,7 +31,7 @@ class Honey2Device(flwr.client.NumPyClient):
         self.model = instantiate(model_cfg)
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
         self.train_loader = trainloader
-        self.val_loader = valloader
+        self.valloader = valloader
         self.device_id = int(device_id)
         self.ready_event = asyncio.Event()
         self.AggregationRegistry = {peer.device_id: asyncio.Event for peer in peers}
@@ -52,10 +52,11 @@ class Honey2Device(flwr.client.NumPyClient):
         alpha = config['alpha']
         lr = config['lr']
         momentum = config['momentum']
-        tau = config['tau']
+        epochs = config['epochs']
+        self.peers = config['peers']
         for _ in range(alpha):
             optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, momentum=momentum)
-            train(self.model, train_loader=self.train_loader, optimizer=optimizer, epochs=tau, device=self.device)
+            train(self.model, train_loader=self.train_loader, optimizer=optimizer, epochs=epochs, device=self.device)
             self.ready_event.set()
             await self.wait_for_peers()
             await self.device_aggregation()
@@ -102,9 +103,11 @@ class Honey2Device(flwr.client.NumPyClient):
 
 def generate_client_fn(trainloaders, valloaders, model_cfg):
     def client_fn(cid):
-        return Honey2Device(cid, trainloaders[cid], valloaders[cid], model_cfg).to_client()
+        return Honey2Device(cid, trainloaders[cid], valloaders[cid], model_cfg, [ ]).to_client()
 
     return client_fn
+
+
 
 
 
