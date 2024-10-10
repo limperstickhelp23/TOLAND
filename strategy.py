@@ -6,9 +6,9 @@ from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy import FedAvg
 import flwr
 from omegaconf import DictConfig, OmegaConf
+from device import generate_client_fn
 
 from utils import test
-
 
 class DecentralizedStrategy(FedAvg):
 
