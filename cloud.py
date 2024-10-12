@@ -8,7 +8,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from data_prepare import prepare_dataset
 
-from decenteralized_strategy import DecentralizedStrategy, get_on_fit_config_fn
+from strategy import DecentralizedStrategy, get_on_fit_config_fn, get_evaluate_fn
 from device import generate_client_fn
 
 
@@ -21,11 +21,11 @@ from models import Net
 @hydra.main(config_path="configs", config_name="network.yaml")
 def cloud(cfg: DictConfig):
     ## 1. Parse config & get experiment output dir
-    print(OmegaConf.to_yaml(cfg))
+    OmegaConf.to_yaml(cfg)
     save_path = HydraConfig.get().runtime.output_dir
 
     trainloaders, validationloaders, testloader = prepare_dataset(
-        cfg.num_clients, cfg.batch_size
+        num_partitions=cfg.num_clients, batch_size=cfg.batch_size
     )
 
     ## 3. Define your clients
@@ -34,7 +34,14 @@ def cloud(cfg: DictConfig):
     # What we need to provide to start_simulation() with is a function that can be called at any point in time to
     # create a client. This is what the line below exactly returns.
 
-    client_fn = generate_client_fn(trainloaders, validationloaders, cfg.model)
+    # client_fn = generate_client_fn(trainloaders, validationloaders, cfg.model)
+    # clients = [client_fn(cid) for cid in range(cfg.num_clients)]
+    #
+    # for client in clients:
+    #     client.peers = [peer for peer in clients if peer != client]
+    #
+    # client_fn_buffer = lambda cid: clients[int(cid)]
+
 
     ## 4. Define your strategy
     # A flower strategy orchestrates your FL pipeline. Although it is present in all stages of the FL process
@@ -44,24 +51,10 @@ def cloud(cfg: DictConfig):
     # You can implement a custom strategy to have full control on all aspects including: how the clients are sampled,
     # how updated models from the clients are aggregated, how the model is evaluated on the server, etc
     # To control how many clients are sampled, strategies often use a combination of two parameters `fraction_{}` and `min_{}_clients`
-    # where `{}` can be either `fit` or `evaluate`, depending on the FL stage. The final number of clients sampled is given by the formula
-    # ``` # an equivalent bit of code is used by the strategies' num_fit_clients() and num_evaluate_clients() built-in methods.
-    #         num_clients = int(num_available_clients * self.fraction_fit)
-    #         clients_to_do_fit = max(num_clients, self.min_fit_clients)
-    # ```
-    # strategy = DecentralizedStrategy(
-    #     fraction_fit=0.0,  # in simulation, since all clients are available at all times, we can just use `min_fit_clients` to control exactly how many clients we want to involve during fit
-    #     min_fit_clients=cfg.num_clients_per_round_fit,  # number of clients to sample for fit()
-    #     fraction_evaluate=0.0,  # similar to fraction_fit, we don't need to use this argument.
-    #     min_evaluate_clients=cfg.num_clients_per_round_eval,  # number of clients to sample for evaluate()
-    #     min_available_clients=cfg.num_clients,  # total clients in the simulation
-    #     on_fit_config_fn=get_on_fit_config_fn(
-    #         cfg.config_fit
-    #     ),  # a function to execute to obtain the configuration to send to the clients during fit()
     #     # evaluate_fn=get_evaluate_fn(cfg.num_classes, testloader),
     # )  # a function to run on the server side to evaluate the global model.
-
-    strategy = instantiate(cfg.strategy)
+    access_points = cfg.neighbor_lists['AP']
+    strategy = instantiate(cfg.strategy, ap_routes= access_points, evaluate_fn=get_evaluate_fn(cfg.num_classes, testloader))
     print(strategy)
 
 
@@ -69,7 +62,7 @@ def cloud(cfg: DictConfig):
     # With the dataset partitioned, the client function and the strategy ready, we can now launch the simulation!
 
     history = fl.simulation.start_simulation(
-        client_fn=client_fn,  # a function that spawns a particular client
+        client_fn=generate_client_fn(trainloaders, validationloaders, cfg.model),  # a function that spawns a particular client
         num_clients=cfg.num_clients,  # total number of clients
         config=fl.server.ServerConfig(
             num_rounds=cfg.num_rounds

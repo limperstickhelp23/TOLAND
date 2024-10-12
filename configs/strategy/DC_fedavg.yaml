@@ -1,10 +1,11 @@
 ---
-_target_: decenteralized_strategy.DecentralizedStrategy # points to FedAvg (as if you were doing it in your python file)
-fraction_fit: 0.0
+_target_: strategy.DecentralizedStrategy # points to FedAvg (as if you were doing it in your python file)
+fraction_fit: 1.0
 min_fit_clients: ${num_clients_per_round_fit} # you can refer to any other variable defined in the config (as long as it is part of the experiment you run)
-fraction_evaluate: 0.0
+fraction_evaluate: 1.0
 min_evaluate_clients: ${num_clients_per_round_eval} # this is a reference to the setting defined in `conf/base.yaml`
 min_available_clients: ${num_clients}
+
 on_fit_config_fn: # this is a function
-  _target_: decenteralized_strategy.get_on_fit_config_fn
+  _target_: strategy.get_on_fit_config_fn
   config: ${config_fit}

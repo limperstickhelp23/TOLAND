@@ -1,16 +1,22 @@
+import os
+
 import torch
 from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, Normalize, ToTensor
 
 
-def get_mnist(data_path: str = "./data"):
+def get_mnist(data_path: str = "/Users/jacobjoseph/GitHub/TOLAND/data"):
     """Download MNIST and apply minimal transformation."""
 
     tr = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
+    bool_ = False
+    print(data_path)
+    if not os.path.exists(os.path.join(data_path, "MNIST")):
+        bool_ = True
 
-    trainset = MNIST(data_path, train=True, download=True, transform=tr)
-    testset = MNIST(data_path, train=False, download=True, transform=tr)
+    trainset = MNIST(data_path, train=True, download=bool_, transform=tr)
+    testset = MNIST(data_path, train=False, download=bool_, transform=tr)
 
     return trainset, testset
 
@@ -23,10 +29,16 @@ def prepare_dataset(num_partitions: int, batch_size: int, val_ratio: float = 0.1
 
     # split trainset into `num_partitions` trainsets (one per client)
     # figure out number of training examples per partition
+    # Calculate base size and remainder
     num_images = len(trainset) // num_partitions
+    remainder = len(trainset) % num_partitions
 
-    # a list of partition lengths (all partitions are of equal size)
+    # Initialize partition_len with base size for each partition
     partition_len = [num_images] * num_partitions
+
+    # Distribute remainder across the first few partitions
+    for i in range(remainder):
+        partition_len[i] += 1
 
     # split randomly. This returns a list of trainsets, each with `num_images` training examples
     # Note this is the simplest way of splitting this dataset. A more realistic (but more challenging) partitioning

@@ -1,13 +1,16 @@
+import os
+
 import torch
 
 
-def train(model, trainloader, optimizer, epochs, device: str):
+def train(model, trainloader, optimizer, epochs, device):
     """Train the network on the training set.
 
     This is a fairly simple training loop for PyTorch.
     """
     criterion = torch.nn.CrossEntropyLoss()
     model.train()
+    print(f"Before :{model.state_dict()}")
     model.to(device)
     for _ in range(epochs):
         for images, labels in trainloader:
@@ -16,9 +19,10 @@ def train(model, trainloader, optimizer, epochs, device: str):
             loss = criterion(model(images), labels)
             loss.backward()
             optimizer.step()
+    print(f"After :{model.state_dict()}")
 
 
-def test(model, testloader, device: str):
+def test(model, testloader, device):
     """Validate the network on the entire test set.
 
     and report loss and accuracy.
@@ -36,3 +40,18 @@ def test(model, testloader, device: str):
             correct += (predicted == labels).sum().item()
     accuracy = correct / len(testloader.dataset)
     return loss, accuracy
+
+directory = "aggregation_metrics"
+
+# Create the directory if it doesn't exist
+if not os.path.exists(directory):
+    os.makedirs(directory)
+def save_metrics(round_number, accuracy, loss):
+    # Define the file path for this round
+    file_path = os.path.join(directory, f"round_{round_number}.txt")
+
+    # Save the metrics to the file
+    with open(file_path, "w") as file:
+        file.write(f"Round: {round_number}\n")
+        file.write(f"Accuracy: {accuracy}\n")
+        file.write(f"Loss: {loss}\n")
