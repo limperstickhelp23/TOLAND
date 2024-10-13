@@ -1,0 +1,16 @@
+run_id: 5
+
+num_rounds: 4
+num_clients: 77
+batch_size: 20
+num_classes: 10
+alpha: 1
+
+config_fit: # a config that each client will receive
+  lr: 0.01 # learning rate to use by the clients
+  momentum: 0.9 # momentum used by SGD optimiser on the client side
+  epochs: 2 # number of training epochs each clients does in a fit() round
+
+defaults:
+  - model: net
+  - neighbor_lists: random_05_100_10
