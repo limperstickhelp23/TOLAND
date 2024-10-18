@@ -1,0 +1,332 @@
+model:
+  _target_: models.Net
+  num_classes: ${num_classes}
+neighbor_lists:
+  AP:
+  - 4
+  - 11
+  - 48
+  - 33
+  - 22
+  4:
+    access_point: 4
+    route:
+    - 4
+    - 0
+    - 1
+    - 5
+    - 6
+    - 9
+    - 14
+    - 24
+    - 32
+    - 36
+    - 38
+    - 40
+    - 44
+    - 45
+    - 47
+  11:
+    access_point: 11
+    route:
+    - 11
+    - 2
+    - 8
+    - 10
+    - 13
+    - 23
+    - 25
+    - 34
+    - 39
+    - 41
+    - 42
+    - 43
+    - 49
+  48:
+    access_point: 48
+    route:
+    - 48
+    - 17
+    - 19
+    - 20
+    - 27
+    - 28
+    - 31
+    - 35
+    - 46
+  33:
+    access_point: 33
+    route:
+    - 33
+    - 3
+    - 7
+    - 16
+    - 18
+    - 21
+    - 26
+    - 29
+  22:
+    access_point: 22
+    route:
+    - 22
+    - 12
+    - 15
+    - 30
+    - 37
+  0:
+    access_point: 4
+    route:
+    - 0
+    - 4
+  1:
+    access_point: 4
+    route:
+    - 1
+    - 4
+  2:
+    access_point: 11
+    route:
+    - 2
+    - 11
+  3:
+    access_point: 33
+    route:
+    - 3
+    - 33
+  5:
+    access_point: 4
+    route:
+    - 5
+    - 0
+    - 4
+  6:
+    access_point: 4
+    route:
+    - 6
+    - 4
+  7:
+    access_point: 33
+    route:
+    - 7
+    - 33
+  8:
+    access_point: 11
+    route:
+    - 8
+    - 11
+  9:
+    access_point: 4
+    route:
+    - 9
+    - 47
+    - 4
+  10:
+    access_point: 11
+    route:
+    - 10
+    - 11
+  12:
+    access_point: 22
+    route:
+    - 12
+    - 22
+  13:
+    access_point: 11
+    route:
+    - 13
+    - 41
+    - 2
+    - 11
+  14:
+    access_point: 4
+    route:
+    - 14
+    - 4
+  15:
+    access_point: 22
+    route:
+    - 15
+    - 22
+  16:
+    access_point: 33
+    route:
+    - 16
+    - 3
+    - 33
+  17:
+    access_point: 48
+    route:
+    - 17
+    - 48
+  18:
+    access_point: 33
+    route:
+    - 18
+    - 33
+  19:
+    access_point: 48
+    route:
+    - 19
+    - 48
+  20:
+    access_point: 48
+    route:
+    - 20
+    - 48
+  21:
+    access_point: 33
+    route:
+    - 21
+    - 33
+  23:
+    access_point: 11
+    route:
+    - 23
+    - 11
+  24:
+    access_point: 4
+    route:
+    - 24
+    - 1
+    - 4
+  25:
+    access_point: 11
+    route:
+    - 25
+    - 11
+  26:
+    access_point: 33
+    route:
+    - 26
+    - 33
+  27:
+    access_point: 48
+    route:
+    - 27
+    - 48
+  28:
+    access_point: 48
+    route:
+    - 28
+    - 46
+    - 48
+  29:
+    access_point: 33
+    route:
+    - 29
+    - 33
+  30:
+    access_point: 22
+    route:
+    - 30
+    - 37
+    - 22
+  31:
+    access_point: 48
+    route:
+    - 31
+    - 19
+    - 48
+  32:
+    access_point: 4
+    route:
+    - 32
+    - 45
+    - 6
+    - 4
+  34:
+    access_point: 11
+    route:
+    - 34
+    - 2
+    - 11
+  35:
+    access_point: 48
+    route:
+    - 35
+    - 48
+  36:
+    access_point: 4
+    route:
+    - 36
+    - 6
+    - 4
+  37:
+    access_point: 22
+    route:
+    - 37
+    - 22
+  38:
+    access_point: 4
+    route:
+    - 38
+    - 9
+    - 47
+    - 4
+  39:
+    access_point: 11
+    route:
+    - 39
+    - 43
+    - 11
+  40:
+    access_point: 4
+    route:
+    - 40
+    - 6
+    - 4
+  41:
+    access_point: 11
+    route:
+    - 41
+    - 2
+    - 11
+  42:
+    access_point: 11
+    route:
+    - 42
+    - 8
+    - 11
+  43:
+    access_point: 11
+    route:
+    - 43
+    - 11
+  44:
+    access_point: 4
+    route:
+    - 44
+    - 1
+    - 4
+  45:
+    access_point: 4
+    route:
+    - 45
+    - 6
+    - 4
+  46:
+    access_point: 48
+    route:
+    - 46
+    - 48
+  47:
+    access_point: 4
+    route:
+    - 47
+    - 4
+  49:
+    access_point: 11
+    route:
+    - 49
+    - 43
+    - 11
+run_id: 7
+num_rounds: 10
+num_clients: 50
+batch_size: 20
+num_classes: 10
+alpha: 1
+config_fit:
+  lr: 0.01
+  momentum: 0.9
+  epochs: 2

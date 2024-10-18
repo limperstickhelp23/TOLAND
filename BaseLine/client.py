@@ -1,5 +1,5 @@
 import torch
-from functorch.dim import Tensor
+
 from omegaconf import DictConfig
 
 

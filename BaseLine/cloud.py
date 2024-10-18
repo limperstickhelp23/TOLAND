@@ -37,22 +37,25 @@ def cloud(cfg:DictConfig):
     os.makedirs(path, exist_ok=True)
 
 
-    trainloaders, validationloaders, testloader = prepare_dataset(cfg.num_clients, cfg.batch_size)
+    trainloaders, validationloaders, testloader = prepare_dataset(cfg.num_clients, cfg.batch_size, iid=cfg.iid)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    net_model = Net(cfg.num_classes)
     #Dictionary of {Access Point : neighbors to aggregate from}
     access_points = cfg.neighbor_lists['AP']
-    alpha = cfg['alpha']
+    aggregation_rounds = cfg['aggregation_rounds']
     ap_routes = {AP: cfg.neighbor_lists[AP].route for AP in access_points}
     ap_avg_state_dict = None
+    net_state_dict = None
     for server_round in range(cfg.num_rounds):
         print(colorama.Fore.LIGHTBLUE_EX+f'Starting server round {server_round}')
-        for a in range(alpha):
+        for aggr_round in range(aggregation_rounds):
             pool = ThreadPoolExecutor(max_workers=10)
             results = []
 
             futures = [pool.submit(local_train, i, Net(cfg.num_classes), trainloaders[i], validationloaders[i],
-                                   get_parameters(ap_avg_state_dict, ap_routes, i), cfg.config_fit, device) for i in range(cfg.num_clients)]
+                                   net_state_dict, cfg.config_fit, device) for i in range(cfg.num_clients)]
+            #get_parameters(ap_avg_state_dict, ap_routes, i)
 
             for future in tqdm(as_completed(futures), total=len(futures), desc="Training clients"):
                 result = future.result()
@@ -60,12 +63,14 @@ def cloud(cfg:DictConfig):
             pool.shutdown(wait=True)
 
             ap_avg_state_dict = ap_aggregate(results, ap_routes) # {AP: avg_parameter(state_dict)}
-            get_ap_metrics(ap_avg_state_dict, path, server_round, a, Net(cfg.num_classes), validationloaders, device)
+            get_ap_metrics(ap_avg_state_dict, path, server_round, aggr_round, Net(cfg.num_classes), validationloaders, device)
+            avg_params = list(ap_avg_state_dict.values())
 
 
-        net_state_dict = aggregate_params(list(ap_avg_state_dict.values()))
-
-        net_model = Net(cfg.num_classes)
+        avg_params = list(ap_avg_state_dict.values())
+        # if server_round != 0:
+        #     avg_params.append(net_model.state_dict())
+        net_state_dict = aggregate_params(avg_params)
 
         net_model.load_state_dict(net_state_dict)
 

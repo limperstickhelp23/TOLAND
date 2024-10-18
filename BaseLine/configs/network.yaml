@@ -1,10 +1,14 @@
-run_id: 5
+#Always change the run_id parameter for new directory.
 
-num_rounds: 4
-num_clients: 77
+
+run_id: 15
+num_rounds: 10
+num_clients: 50
 batch_size: 20
 num_classes: 10
-alpha: 1
+aggregation_rounds: 1
+alpha: 0.5 # control how much iid needed in the dataset, lower the more non-iid.
+iid: 0 #bool value for data distribuitions
 
 config_fit: # a config that each client will receive
   lr: 0.01 # learning rate to use by the clients
@@ -13,4 +17,4 @@ config_fit: # a config that each client will receive
 
 defaults:
   - model: net
-  - neighbor_lists: random_05_100_10
+  - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
