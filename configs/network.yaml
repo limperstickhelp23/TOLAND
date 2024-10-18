@@ -1,18 +1,20 @@
+#Always change the run_id parameter for new directory.
 
-num_rounds: 1 # number of FL rounds in the experiment
-num_clients: 1 # number of total clients available (this is also the number of partitions we need to create)
-batch_size: 20 # batch size to use by clients during training
-num_classes: 10 # number of classes in our dataset (we use MNIST)
-num_clients_per_round_fit: 1 # number of clients to involve in each fit round
-num_clients_per_round_eval: 1 # number of clients to involve in each evaluate round
+
+run_id: 15
+num_rounds: 10
+num_clients: 50
+batch_size: 20
+num_classes: 10
+aggregation_rounds: 1
+alpha: 0.5 # control how much iid needed in the dataset, lower the more non-iid.
+iid: 0 #bool value for data distribuitions
+
 config_fit: # a config that each client will receive
   lr: 0.01 # learning rate to use by the clients
   momentum: 0.9 # momentum used by SGD optimiser on the client side
-  epochs: 8 # number of training epochs each clients does in a fit() round
-  peers: ${neighbor_lists}
-  alpha: 2
+  epochs: 2 # number of training epochs each clients does in a fit() round
 
 defaults:
   - model: net
-  - neighbor_lists: random_05_100_10
-  - strategy: DC_fedavg
+  - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here

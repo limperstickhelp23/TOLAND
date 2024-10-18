@@ -1,113 +1,133 @@
-# import pickle
-# from pathlib import Path
+import copy
 
-import flwr as fl
+import argparse
+
+import pickle
+
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pickle import EMPTY_DICT
+
+from tqdm import tqdm
+
 import hydra
+import omegaconf
+import numpy as np
+import torch
 from hydra.core.hydra_config import HydraConfig
 from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
+
+from client import local_train, test
 from data_prepare import prepare_dataset
-
-from strategy import DecentralizedStrategy, get_on_fit_config_fn, get_evaluate_fn
-from device import generate_client_fn
-
-
 from models import Net
-# from client import generate_client_fn
-# from dataset import prepare_dataset
+import colorama
 
 
-# A decorator for Hydra. This tells hydra to by default load the config in conf/base.yaml
-@hydra.main(config_path="configs", config_name="network.yaml")
-def cloud(cfg: DictConfig):
-    ## 1. Parse config & get experiment output dir
-    OmegaConf.to_yaml(cfg)
+
+
+@hydra.main(config_path="configs", config_name="network", version_base=None)
+def cloud(cfg:DictConfig):
+    omegaconf.OmegaConf.to_yaml(cfg)
     save_path = HydraConfig.get().runtime.output_dir
 
-    trainloaders, validationloaders, testloader = prepare_dataset(
-        num_partitions=cfg.num_clients, batch_size=cfg.batch_size
-    )
+    run = cfg['run_id']
 
-    ## 3. Define your clients
-    # Unlike in standard FL (e.g. see the quickstart-pytorch or quickstart-tensorflow examples in the Flower repo),
-    # in simulation we don't want to manually launch clients. We delegate that to the VirtualClientEngine.
-    # What we need to provide to start_simulation() with is a function that can be called at any point in time to
-    # create a client. This is what the line below exactly returns.
-
-    # client_fn = generate_client_fn(trainloaders, validationloaders, cfg.model)
-    # clients = [client_fn(cid) for cid in range(cfg.num_clients)]
-    #
-    # for client in clients:
-    #     client.peers = [peer for peer in clients if peer != client]
-    #
-    # client_fn_buffer = lambda cid: clients[int(cid)]
+    path = f"metrics/run_{run}/"
+    os.makedirs(path, exist_ok=True)
 
 
-    ## 4. Define your strategy
-    # A flower strategy orchestrates your FL pipeline. Although it is present in all stages of the FL process
-    # each strategy often differs from others depending on how the model _aggregation_ is performed. This happens
-    # in the strategy's `aggregate_fit()` method. In this tutorial we choose FedAvg, which simply takes the average
-    # of the models received from the clients that participated in a FL round doing fit().
-    # You can implement a custom strategy to have full control on all aspects including: how the clients are sampled,
-    # how updated models from the clients are aggregated, how the model is evaluated on the server, etc
-    # To control how many clients are sampled, strategies often use a combination of two parameters `fraction_{}` and `min_{}_clients`
-    #     # evaluate_fn=get_evaluate_fn(cfg.num_classes, testloader),
-    # )  # a function to run on the server side to evaluate the global model.
+    trainloaders, validationloaders, testloader = prepare_dataset(cfg.num_clients, cfg.batch_size, iid=cfg.iid)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    net_model = Net(cfg.num_classes)
+    #Dictionary of {Access Point : neighbors to aggregate from}
     access_points = cfg.neighbor_lists['AP']
-    strategy = instantiate(cfg.strategy, ap_routes= access_points, evaluate_fn=get_evaluate_fn(cfg.num_classes, testloader))
-    print(strategy)
+    aggregation_rounds = cfg['aggregation_rounds']
+    ap_routes = {AP: cfg.neighbor_lists[AP].route for AP in access_points}
+    ap_avg_state_dict = None
+    net_state_dict = None
+    for server_round in range(cfg.num_rounds):
+        print(colorama.Fore.LIGHTBLUE_EX+f'Starting server round {server_round}')
+        for aggr_round in range(aggregation_rounds):
+            pool = ThreadPoolExecutor(max_workers=10)
+            results = []
+
+            futures = [pool.submit(local_train, i, Net(cfg.num_classes), trainloaders[i], validationloaders[i],
+                                   net_state_dict, cfg.config_fit, device) for i in range(cfg.num_clients)]
+            #get_parameters(ap_avg_state_dict, ap_routes, i)
+
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Training clients"):
+                result = future.result()
+                results.append(result)
+            pool.shutdown(wait=True)
+
+            ap_avg_state_dict = ap_aggregate(results, ap_routes) # {AP: avg_parameter(state_dict)}
+            get_ap_metrics(ap_avg_state_dict, path, server_round, aggr_round, Net(cfg.num_classes), validationloaders, device)
+            avg_params = list(ap_avg_state_dict.values())
 
 
-    ## 5. Start Simulation
-    # With the dataset partitioned, the client function and the strategy ready, we can now launch the simulation!
+        avg_params = list(ap_avg_state_dict.values())
+        # if server_round != 0:
+        #     avg_params.append(net_model.state_dict())
+        net_state_dict = aggregate_params(avg_params)
 
-    history = fl.simulation.start_simulation(
-        client_fn=generate_client_fn(trainloaders, validationloaders, cfg.model),  # a function that spawns a particular client
-        num_clients=cfg.num_clients,  # total number of clients
-        config=fl.server.ServerConfig(
-            num_rounds=cfg.num_rounds
-        ),  # minimal config for the server loop telling the number of rounds in FL
-        strategy=strategy,  # our strategy of choice
-        client_resources={
-            "num_cpus": 2,
-            "num_gpus": 0.0,
-        },  # (optional) controls the degree of parallelism of your simulation.
-        # Lower resources per client allow for more clients to run concurrently
-        # (but need to be set taking into account the compute/memory footprint of your run)
-        # `num_cpus` is an absolute number (integer) indicating the number of threads a client should be allocated
-        # `num_gpus` is a ratio indicating the portion of gpu memory that a client needs.
-    )
+        net_model.load_state_dict(net_state_dict)
 
-    # ^ Following the above comment about `client_resources`. if you set `num_gpus` to 0.5 and you have one GPU in your system,
-    # then your simulation would run 2 clients concurrently. If in your round you have more than 2 clients, then clients will wait
-    # until resources are available from them. This scheduling is done under-the-hood for you so you don't have to worry about it.
-    # What is really important is that you set your `num_gpus` value correctly for the task your clients do. For example, if you are training
-    # a large model, then you'll likely see `nvidia-smi` reporting a large memory usage of you clients. In those settings, you might need to
-    # leave `num_gpus` as a high value (0.5 or even 1.0). For smaller models, like the one in this tutorial, your GPU would likely be capable
-    # of running at least 2 or more (depending on your GPU model.)
-    # Please note that GPU memory is only one dimension to consider when optimising your simulation. Other aspects such as compute footprint
-    # and I/O to the filesystem or data preprocessing might affect your simulation  (and tweaking `num_gpus` would not translate into speedups)
-    # Finally, please note that these gpu limits are not enforced, meaning that a client can still go beyond the limit initially assigned, if
-    # this happens, your might get some out-of-memory (OOM) errors.
+        g_loss, g_accuracy = test(net_model, testloader, device)
 
-    ## 6. Save your results
-    # (This is one way of saving results, others are of course valid :) )
-    # Now that the simulation is completed, we could save the results into the directory
-    # that Hydra created automatically at the beginning of the experiment.
-
-    # results_path = Path(save_path) / "results.pkl"
-
-    # add the history returned by the strategy into a standard Python dictionary
-    # you can add more content if you wish (note that in the directory created by
-    # Hydra, you'll already have the config used as well as the log)
-
-    # results = {"history": history, "anythingelse": "here"}
-
-    # save the results as a python pickle
-
-    # with open(str(results_path), "wb") as h:
-    #     pickle.dump(results, h, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(path+f'global_model_eval.txt', 'a') as file:
+            file.write(f'round {server_round}: \n loss: {g_loss} \n accuracy: {g_accuracy}\n')
 
 
-if __name__ == "__main__":
+def aggregate_params(model_params):
+    averaged_state_dict = {}
+
+    for key in model_params[0].keys(): #conv1_
+        param_stack = torch.stack([state_dict[key] for state_dict in model_params], dim=0)
+
+        avg_params = torch.mean(param_stack, dim=0)
+
+        averaged_state_dict[key] = avg_params
+
+    return averaged_state_dict
+
+def aggregate_at_server(ap_avg_state_dict):
+    return aggregate_params(ap_avg_state_dict)
+
+
+def ap_aggregate(results, ap_routes)-> [torch.Tensor]:
+    ap_params = {}
+    for AP, peers in ap_routes.items():
+        chosen_params = [result[1] for result in results if result[0] in peers]
+
+        avg_ap_state_dict = aggregate_params(chosen_params)
+        ap_params[AP] = avg_ap_state_dict
+
+    return ap_params
+def get_parameters(ap_state_dict, ap_routes, node_id):
+    if ap_state_dict is None:
+        return None
+    key = None
+    for AP, peers in ap_routes.items():
+        if  node_id in peers:
+            key = AP
+            break
+
+    return ap_state_dict[key]
+
+def get_ap_metrics(ap_avg_state_dict, path, server_round, a, model, testloaders, device):
+    file_path = path+f'access_point_eval_{server_round}/aggregate_{a}.txt'
+
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, 'w') as file:
+        for AP, state_dict in ap_avg_state_dict.items():
+            model.load_state_dict(state_dict)
+            loss, accuracy = test(model, testloaders[AP], device)
+            file.write(f"{AP} : \n\tloss: {loss} \n\taccuracy: {accuracy}\n")
+
+
+if __name__ == '__main__':
     cloud()
+

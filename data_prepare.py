@@ -1,7 +1,10 @@
+from collections import defaultdict
+
+import numpy as np
 import os
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, Subset
 from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, Normalize, ToTensor
 
@@ -21,8 +24,8 @@ def get_mnist(data_path: str = "/Users/jacobjoseph/GitHub/TOLAND/data"):
     return trainset, testset
 
 
-def prepare_dataset(num_partitions: int, batch_size: int, val_ratio: float = 0.1):
-    """Download MNIST and generate IID partitions."""
+def prepare_dataset(num_partitions: int, batch_size: int, val_ratio: float = 0.1, iid: bool = True, alpha=0.5):
+    """Prepare data loaders for each client and choose to non-iid or iid datasets"""
 
     # download MNIST in case it's not already in the system
     trainset, testset = get_mnist()
@@ -40,15 +43,10 @@ def prepare_dataset(num_partitions: int, batch_size: int, val_ratio: float = 0.1
     for i in range(remainder):
         partition_len[i] += 1
 
-    # split randomly. This returns a list of trainsets, each with `num_images` training examples
-    # Note this is the simplest way of splitting this dataset. A more realistic (but more challenging) partitioning
-    # would induce heterogeneity in the partitions in the form of for example: each client getting a different
-    # amount of training examples, each client having a different distribution over the labels (maybe even some
-    # clients not having a single training example for certain classes). If you are curious, you can check online
-    # for Dirichlet (LDA) or pathological dataset partitioning in FL. A place to start is: https://arxiv.org/abs/1909.06335
-    trainsets = random_split(
-        trainset, partition_len, torch.Generator().manual_seed(2023)
-    )
+    if iid:
+        trainsets = random_split(trainset, partition_len, torch.Generator().manual_seed(2023))
+    else:
+        trainsets = dirichlet_partition(trainset, partition_len, alpha)
 
     # create dataloaders with train+val support
     trainloaders = []
@@ -72,14 +70,45 @@ def prepare_dataset(num_partitions: int, batch_size: int, val_ratio: float = 0.1
             DataLoader(for_val, batch_size=batch_size, shuffle=False, num_workers=2)
         )
 
-    # We leave the test set intact (i.e. we don't partition it)
-    # This test set will be left on the server side and we'll be used to evaluate the
-    # performance of the global model after each round.
-    # Please note that a more realistic setting would instead use a validation set on the server for
-    # this purpose and only use the testset after the final round.
-    # Also, in some settings (specially outside simulation) it might not be feasible to construct a validation
-    # set on the server side, therefore evaluating the global model can only be done by the clients. (see the comment
-    # in main.py above the strategy definition for more details on this)
     testloader = DataLoader(testset, batch_size=128)
 
     return trainloaders, valloaders, testloader
+
+
+def dirichlet_partition(trainset, partition_len, alpha=0.5, num_classes=10):
+    """
+    dirichlet partition
+    :param num_classes:
+    :param trainset: train data set
+    :param partition_len: # of datasets to be created
+    :param alpha: lower the value the more the non-iid of the resulting datasets
+    :return: a list of partitioned datasets of varying distributions
+    """
+    class_indices = defaultdict(list)
+
+    for idx, (image, label) in enumerate(trainset):
+        class_indices[label].append(idx)
+
+    for label in class_indices:
+        np.random.shuffle(class_indices[label])
+
+    # Use Dirichlet distribution to partition indices non-IID
+    partitions = [[] for _ in range(len(partition_len))]
+    for label in range(num_classes):
+        class_size = len(class_indices[label])
+
+        proportions = np.random.dirichlet([alpha] * len(partition_len))
+        proportions = np.array([int(p * class_size) for p in proportions])
+
+        proportions[-1] = class_size - proportions[:-1].sum()
+
+        current_idx = 0
+        for i, partition in enumerate(partitions):
+            partition.extend(class_indices[label][current_idx:current_idx + proportions[i]])
+            current_idx += proportions[i]
+
+    # Create Subsets for each partition
+    partitioned_datasets = [Subset(trainset, indices) for indices in partitions]
+
+    return partitioned_datasets
+

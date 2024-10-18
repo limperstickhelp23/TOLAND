@@ -1,8 +1,7 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
+import torch.nn.functional  as F
 
-# Note the model and functions here defined do not have any FL-specific components.
 
 class Net(nn.Module):
     """A simple CNN suitable for simple vision tasks."""
