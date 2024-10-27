@@ -144,7 +144,7 @@ class CosineReassignment(MobileNet):
     
     def assign_communities(self):
         """
-        Simulated Version:
+        Simulated Version: (Same as Integrated Version ?)
             Re-Set Communities After Organizing & After Training 
                 ap_member_map: Key(AP) Value(List of Members)
                 ap_param_stacks: Directly Looks Up From Each Device Model
@@ -156,21 +156,61 @@ class CosineReassignment(MobileNet):
             self.ap_member_map[d.parent_point].append(d.id)
             self.ap_param_stacks[d.parent_point].append(d.model.state_dict()) #NOTE: can use .parameters() or .state_dict()
 
-    def assign_communities_after_training(self):
-        """
-        Integrated Version
-        
-        """
-        self.ap_member_map={ap:[] for ap in self.curr_apoints}
-        self.ap_param_stacks={ap:[] for ap in self.curr_apoints}
-        
-        for d in self.device_list:
-            self.ap_member_map[d.parent_point].append(d.id)
-            self.ap_param_stacks[d.parent_point].append(d.model.state_dict()) #NOTE: can use .parameters() or .state_dict()
-
-
 
     def local_aggregation_round(self):
+        """
+        Simulated Version:
+            The local aggregation round maps parameters internally.
+            This way each device knows its community parameters.
+        """
+        ap_avg_state_dict={} #NOTE: temp variable to match back semantically to cloud.py
+        for (AP,members) in self.ap_member_map.items():
+            community_state_dict=aggregate_params(self.ap_param_stacks[AP])
+            self.device_list[AP].model.load_state_dict(community_state_dict)
+            for idx in members:
+                self.device_list[idx].community_model.load_state_dict(community_state_dict)
+            ap_avg_state_dict[AP]=community_state_dict
+        # self.ap_params=ap_avg_state_dict
+        
+        return ap_avg_state_dict
+    
+    def map_results(self,results):
+        """
+        For Integration:
+            Since we train externally. This function facilitates mappings (either stored in the object or in files)
+            between the Algorithm internal representation of devices to the externally trained models
+        
+        """
+        results=dict(results)
+        for (AP, peers) in self.memberships.items():
+            for peer in peers:
+                print(peer)
+                self.device_list[peer].model.load_state_dict(results[peer]) # attribute 
+        return
+
+    
+    def integrated_local_aggregation_round(self):
+
+        """
+        Integrated Version:
+            Because the communities have been re-assigned. We now need to 
+            redo the internal mappings.
+            
+            Aggregate AP makes the initial community models after local training.
+
+            Wait. But probably makes the most sense to keep the community models fixed until the end of
+            all the local training rounds
+
+            Instead facilitate mappings (with function above). Intermediate rounds can just be swaps of information
+            and local training. 
+            
+            TODO: figure out facilitating local aggregation rounds. The reason for this is it might be better
+            to run re-assignment prior to doing any local aggregation so that local aggregation rounds can be even better/
+            more accurate.
+
+            Then, the last local aggregation round can be used to communicate back up to server for central round
+        
+        """
 
         for (AP,members) in self.ap_member_map.items():
             community_state_dict=aggregate_params(self.ap_param_stacks[AP])
@@ -181,63 +221,26 @@ class CosineReassignment(MobileNet):
         return
     
     #TODO: figure out how to connect results back to local aggregation algorithm
-    def ap_aggregate(self, results)-> List[torch.Tensor]:
+    def ap_aggregate(self):
 
-        for (AP, peers) in self.memberships.items():
-            chosen_params = [result[1] for result in results if result[0] in peers]
-            self.ap_params[AP] = aggregate_params(chosen_params)
-
-
-
-    def self_assign(self,max_iters=10):
         """
-        NOTE: This will usually work except sometimes the order can affect it. 
-        So for example (0,3,6,9) are all supposed to be red but 9 is initially yellow.
-        Then 3 was similar to 9 so was pulled into yellow camp and brought 6 with it. 
+        Integrated Version:
+            * Map results list to the Algorithm local copy of parameters
+            *TODO: streamline this -- need a better solution
 
-        This is at the first round. To get around this, I hope doing community aggregations will help.
 
-        Another way would be to try to assign them to the most similar access point. However they may not always be close
-        to the access point with the best similarity
-        
+            TODO
+            Instead of this accepting the results list, it will just do a local
+            aggregation round based ont eh current mappings
         """
+        results=dict(results)
 
-        changes=1000
-
-        for _ in range(max_iters):
-            if changes < 2:
-                break
-            else:
-                changes = 0
-            
-
-            for dobj in self.device_list:
-                
-                dvc=dobj.id
-                if dvc in self.curr_apoints:
-                    continue # NOTE: access points stay fixed, I think this will be key to algorithm but could be wrong
-                
-                ## Similarity with "self" -- community model
-                max_cosim=compute_device_to_community_cosim(self.device_list[dvc],self.device_list[dvc])
-                max_nbr,max_color=dvc,self.device_list[dvc].color
-
-                for nbr in self.NXG1.neighbors(dvc):
-
-                    cosim=compute_device_model_cosim_metric(self.device_list[dvc], self.device_list[nbr])
-                    if cosim > max_cosim:
-                        max_cosim,max_nbr,max_color=cosim,nbr,self.device_list[nbr].color
-                        self.device_list[dvc].parent_point = self.device_list[nbr].parent_point
-
-                # print(f"match? {dvc} : {max_nbr}, {max_cosim}")
-                if max_color != self.device_list[dvc].color:
-                    changes += 1
-                
-                self.device_list[dvc].color = max_color   
-        # TODO/NOTE: load current access points from devices -- shoul dbe its own function  
-        # Re-Set Communities after Organization
-        self.assign_communities()
+        for (AP, peers) in self.ap_member_map.items():
+            for (AP,members) in self.ap_member_map.items():
+                community_state_dict=aggregate_params(self.ap_param_stacks[AP])
+                self.ap_params[AP]=community_state_dict
         
-        return
+
     
     def compare_communities(self,max_iters=10):
         """
@@ -284,5 +287,56 @@ class CosineReassignment(MobileNet):
             
         # Re-Set Communities after Comparisons
         self.assign_communities()
+        return
+    
+    def self_assign(self,max_iters=10):
+        """
+        NOTE: FIRST VERSION  -- New version usese comparisons to community models instad.
+       
+        This works ok except sometimes the order can affect it. 
+        So for example (0,3,6,9) are all supposed to be red but 9 is initially yellow.
+        Then 3 was similar to 9 so was pulled into yellow camp and brought 6 with it. 
+
+        This is at the first round. To get around this, I hope doing community aggregations will help.
+
+        Another way would be to try to assign them to the most similar access point. However they may not always be close
+        to the access point with the best similarity
+        """
+
+        changes=1000
+
+        for _ in range(max_iters):
+            if changes < 2:
+                break
+            else:
+                changes = 0
+            
+
+            for dobj in self.device_list:
+                
+                dvc=dobj.id
+                if dvc in self.curr_apoints:
+                    continue # NOTE: access points stay fixed, I think this will be key to algorithm but could be wrong
+                
+                ## Similarity with "self" -- community model
+                max_cosim=compute_device_to_community_cosim(self.device_list[dvc],self.device_list[dvc])
+                max_nbr,max_color=dvc,self.device_list[dvc].color
+
+                for nbr in self.NXG1.neighbors(dvc):
+
+                    cosim=compute_device_model_cosim_metric(self.device_list[dvc], self.device_list[nbr])
+                    if cosim > max_cosim:
+                        max_cosim,max_nbr,max_color=cosim,nbr,self.device_list[nbr].color
+                        self.device_list[dvc].parent_point = self.device_list[nbr].parent_point
+
+                # print(f"match? {dvc} : {max_nbr}, {max_cosim}")
+                if max_color != self.device_list[dvc].color:
+                    changes += 1
+                
+                self.device_list[dvc].color = max_color   
+        # TODO/NOTE: load current access points from devices -- shoul dbe its own function  
+        # Re-Set Communities after Organization
+        self.assign_communities()
+        
         return
 
