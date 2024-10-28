@@ -126,10 +126,9 @@ class CosineReassignment(MobileNet):
         Within Local
     """
 
-    def __init__(self,num_devices):
-        super().__init__(n=num_devices)
-        self.ap_member_map={} #NOTE/TODO redundant perhaps ??
-        self.ap_param_stacks={}
+    def __init__(self,num_devices,num_classes,perceptual_map):
+        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map)
+        self.ap_param_stacks={} # TODO: don't need this?
     
     def rewire_round(self,round_num=0):
         self.build_proximity_graph()
@@ -155,7 +154,8 @@ class CosineReassignment(MobileNet):
         for d in self.device_list:
             self.ap_member_map[d.parent_point].append(d.id)
             self.ap_param_stacks[d.parent_point].append(d.model.state_dict()) #NOTE: can use .parameters() or .state_dict()
-
+        
+        self.reset_colors() # NOTE: whoops forgot this before
 
     def local_aggregation_round(self):
         """
@@ -177,15 +177,14 @@ class CosineReassignment(MobileNet):
     def map_results(self,results):
         """
         For Integration:
-            Since we train externally. This function facilitates mappings (either stored in the object or in files)
+            Since we train externally, this function facilitates mappings (either stored in the object or in files)
             between the Algorithm internal representation of devices to the externally trained models
         
         """
-        results=dict(results)
-        for (AP, peers) in self.memberships.items():
+        results={r[0]:r[1] for r in results} # convert to dictionary
+        for (AP, peers) in self.ap_member_map.items():
             for peer in peers:
-                print(peer)
-                self.device_list[peer].model.load_state_dict(results[peer]) # attribute 
+                self.device_list[peer].model.load_state_dict(results[peer]) # attribute results to devices
         return
 
     
@@ -209,7 +208,6 @@ class CosineReassignment(MobileNet):
             more accurate.
 
             Then, the last local aggregation round can be used to communicate back up to server for central round
-        
         """
 
         for (AP,members) in self.ap_member_map.items():
@@ -222,15 +220,12 @@ class CosineReassignment(MobileNet):
     
     #TODO: figure out how to connect results back to local aggregation algorithm
     def ap_aggregate(self):
-
         """
         Integrated Version:
             * Map results list to the Algorithm local copy of parameters
             *TODO: streamline this -- need a better solution
 
-
-            TODO
-            Instead of this accepting the results list, it will just do a local
+            *TODO: Instead of this accepting the results list, it will just do a local
             aggregation round based ont eh current mappings
         """
         results=dict(results)
@@ -241,7 +236,6 @@ class CosineReassignment(MobileNet):
                 self.ap_params[AP]=community_state_dict
         
 
-    
     def compare_communities(self,max_iters=10):
         """
             NOTE: In this case, devices store parameters from both their own model and the community model.
@@ -249,7 +243,6 @@ class CosineReassignment(MobileNet):
             community is a better fit. The baseline is cosine similarity with their current community model.
             If no community is better now switch occurs
         """
-
         changes=1000
 
         for iter in range(max_iters):

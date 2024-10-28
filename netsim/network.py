@@ -12,6 +12,12 @@ import torch.nn.functional as F
 import torch
 from typing import List
 
+# TODO -- replace possibly with color maps for more aesthetic plots
+COLORS=[
+    "red","blue","gold","green","lavender","magenta","orange","grey","firebrick","brown","tab:blue","darkgreen","indigo"
+    "black", "teal", "bisque", "mediumturquoise", "darkviolet"
+]
+
 # Utilities
 def get_sampled_colors(n, colormap='viridis'):
     cmap = cm.get_cmap(colormap, n)
@@ -90,12 +96,12 @@ class Device:
         return
 
 class MobileNet:
-    def __init__(self,n,λ=10,plotcolors="rainbow"):
+    def __init__(self,num_devices=10,λ=10,perceptual_map="rainbow",num_classes=10):
         
-        self.N=n # self.devices={}
-        self.device_list=[Device(i,λ=λ) for i in range(n)]
-        self.D = np.zeros([n,n])
-        self.A = np.zeros([n,n])
+        self.N=num_devices # self.devices={}
+        self.device_list=[Device(i,λ=λ,num_classes=num_classes) for i in range(self.N)]
+        self.D = np.zeros([self.N,self.N])
+        self.A = np.zeros([self.N,self.N])
         self.d_max = 25
         self.curr_apoints = []
         self.num_apoints = 5
@@ -103,16 +109,16 @@ class MobileNet:
         self.reset_topologies()
         self.topology_cost=0
         self.AGG_COST = 100
-        self.assignments = {} #NOTE: this might be legacy as it is specific to the yaml file
-        self.memberships = {} #NOTE: key AP: and value is a list of everyone assigned to it
+        self.assignments = {} #NOTE: this might be legacy -- directly corresponds to the old file structure (AP, route: etc.)
+        self.ap_member_map = {} #NOTE: key AP: values list of everyone assigned to it
         self.routes = {}
         self.ap_params = {}  #NOTE/TODO: store parameters in sim object, then devices can look up parameters
         # self.server=Device() #TODO/ Store here ?
         # self.server.x,self.server.y = 98,98
-        self.GEN=GraphGenerator(n)
+        self.GEN=GraphGenerator(num_devices)
         self.threshold = 10
-        self.colormap = "rainbow"
-        self.cmap=get_sampled_colors(n=self.N,colormap=plotcolors)
+        self.colormap = perceptual_map
+        self.cmap=get_sampled_colors(n=self.N,colormap=perceptual_map) # TODO make even perceptual spacing dynamically at init
         self.reset_colors()
         """
             TODO: Legacy stuff
@@ -137,10 +143,11 @@ class MobileNet:
         self.NXG2 = nx.from_numpy_array(self.A)
         self.topology_cost = 0
 
-    def reset_colors(self):
-        self.colors={self.cmap[i]:[] for i in range(self.N)}
-        self.colors[self.ap_color]=self.curr_apoints
-        self.ap_color_map={ap: self.cmap[n] for (n,ap) in enumerate(self.curr_apoints)}
+    def reset_colors(self, ap_color=None):
+        # Assign/ populate colors from the ap_member_map and matpltlib color_map
+        self.colors={self.cmap[n]: v for (n,v) in enumerate(self.ap_member_map.values())}
+        if ap_color is not None:
+            self.colors[ap_color]=self.curr_apoints
 
     def init_server(self,pos=[0,0]):
         self.server = Device()
@@ -195,10 +202,10 @@ class MobileNet:
             Creates Community: {community_id: [list of members]}
         """
         if memberships != None: 
-            self.memberships=memberships
+            self.ap_member_map=memberships
         self.communities = {ap: [] for ap in self.curr_apoints}
         
-        for (k,AP) in self.memberships.items():
+        for (k,AP) in self.ap_member_map.items():
             if (k!=AP):
                 c=self.ap_color_map[AP] 
             else:
@@ -232,7 +239,8 @@ class MobileNet:
         (access_points,_)=betweeness_rule(self.NXG1,top=self.num_apoints,weight='weight')
         self.curr_apoints=list(access_points)
         self.edge_nodes=list(set(self.NXG1.nodes)-set(access_points))
-        self.generate_access_point_assignments()        
+        self.generate_access_point_assignments()   
+        self.reset_colors()     
         return
 
     def generate_access_point_assignments(self):
@@ -241,7 +249,7 @@ class MobileNet:
         ## assign devices
         for ap in self.curr_apoints:
             self.assignments[ap]={"access_point":ap, "route":[ap]} 
-            self.memberships[ap]=[ap]
+            self.ap_member_map[ap]=[ap]
             self.device_list[ap].parent_point = ap
 
         for node in self.edge_nodes:
@@ -259,7 +267,7 @@ class MobileNet:
             else:
                 self.assignments[node]={"access_point":parent, "route":route}
                 self.assignments[parent]["route"].append(node)
-                self.memberships[parent].append(node)
+                self.ap_member_map[parent].append(node)
                 self.device_list[node].parent_point = parent
         
         if len(self.isolates) > 0:
@@ -302,7 +310,8 @@ class MobileNet:
             # self.ap_color_map={ap: clist[n] for (n,ap) in enumerate(self.curr_apoints)}
 
         self.assignments=assignments
-        self.memberships={k: v['access_point'] for (k,v) in assignments.items() if k != "AP"}
+        self.ap_member_map={k: v['access_point'] for (k,v) in assignments.items() if k != "AP"}
+        self.reset_colors()
         # for (k,v) in self.routes.items():
         #     print(k, " ", v)
 
@@ -375,6 +384,29 @@ class MobileNet:
                             node_color="gold", node_size=1200, node_shape='*', label="Server")
         return
     
+    
+    def plot_communities(self,ax=None, spring=False):
+
+        G=self.NXG1
+        pos=self.get_positions()
+        
+        if (spring==True):
+            pos = nx.spring_layout(G, seed=42, k=1.5, iterations=50)
+
+        if ax==None:
+            fig,ax=plt.subplots()
+
+        for node_color, nodelist in self.colors.items():
+            for node in nodelist:
+                node_size,node_shape=230,'o'
+                if node in self.curr_apoints:
+                    node_size,node_shape=1000,'*'
+                nx.draw_networkx_nodes(G, pos, nodelist=[node], node_color=node_color,node_size=node_size,node_shape=node_shape,ax=ax)
+            labels = {x: x for x in G.nodes}
+            
+        nx.draw_networkx_labels(G, pos, labels, font_size=14,font_weight='bold',font_color='w',ax=ax)
+        nx.draw_networkx_edges(G, pos, edgelist=G.edges(),width=.5, alpha=0.75,ax=ax)
+    
     def plot_positions(self):
         pos=self.get_positions()
         NXG=self.NXG2
@@ -426,7 +458,7 @@ class MobileNet:
 
     def ap_aggregate(self, results)-> List[torch.Tensor]:
         ap_params = {}
-        for (AP, peers) in self.memberships.items():
+        for (AP, peers) in self.ap_member_map.items():
             chosen_params = [result[1] for result in results if result[0] in peers]
             self.ap_params[AP] = aggregate_params(chosen_params)
 

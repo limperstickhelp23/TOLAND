@@ -20,8 +20,6 @@ def local_train(cid, model, trainloader, valloder, parameters, cfg:DictConfig, d
     return [cid, model.state_dict(), metrics]
 
 
-
-
 def train(model, device, train_loader, optimizer, epochs):
     criterion = torch.nn.CrossEntropyLoss()
     model.train()
@@ -33,7 +31,6 @@ def train(model, device, train_loader, optimizer, epochs):
             loss = criterion(model(images), labels)
             loss.backward()
             optimizer.step()
-
 
 
 

@@ -8,13 +8,13 @@ from torch.utils.data import DataLoader, random_split, Subset
 from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, Normalize, ToTensor
 
-
 def get_mnist(data_path: str = "/Users/jacobjoseph/GitHub/TOLAND/data"):
     """Download MNIST and apply minimal transformation."""
+    data_path=os.path.dirname(os.path.abspath(__file__))
+    print(f"MNIST Downloaded to {data_path}")
 
     tr = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
     bool_ = False
-    print(data_path)
     if not os.path.exists(os.path.join(data_path, "MNIST")):
         bool_ = True
 
@@ -22,7 +22,6 @@ def get_mnist(data_path: str = "/Users/jacobjoseph/GitHub/TOLAND/data"):
     testset = MNIST(data_path, train=False, download=bool_, transform=tr)
 
     return trainset, testset
-
 
 def prepare_dataset(num_partitions: int, batch_size: int, val_ratio: float = 0.1, iid: bool = True, alpha=0.5):
     """Prepare data loaders for each client and choose to non-iid or iid datasets"""
