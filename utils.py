@@ -5,13 +5,11 @@ from client import test
 import pandas as pd
 
 def aggregate_params(model_params):
+    
     averaged_state_dict = {}
-
     for key in model_params[0].keys(): #conv1_
         param_stack = torch.stack([state_dict[key] for state_dict in model_params], dim=0)
-
         avg_params = torch.mean(param_stack, dim=0)
-
         averaged_state_dict[key] = avg_params
 
     return averaged_state_dict
@@ -51,6 +49,21 @@ def get_ap_metrics(ap_avg_state_dict, path, server_round, a, model, testloaders,
             loss, accuracy = test(model, testloaders[AP], device)
             file.write(f"{AP} : \n\tloss: {loss} \n\taccuracy: {accuracy}\n")
 
+def update_ap_metrics(ap_avg_state_dict,model,testloaders,device):
+    losses,accuracies=[],[]
+    for (AP, state_dict) in ap_avg_state_dict.items():
+        model.load_state_dict(state_dict),
+        loss, accuracy = test(model, testloaders[AP], device)
+        losses.append(loss)
+        accuracies.append(accuracy)
+    
+    return {
+        "ap_nodes":list(ap_avg_state_dict.keys()),
+        "losses":losses, 
+        "accuracies":accuracies
+    }
+
+
 # def get_ap_metrics_pandas(ap_avg_state_dict, path, server_round, a, model, testloaders, device):
 #     """TODO WIP """
     
@@ -59,7 +72,11 @@ def get_ap_metrics(ap_avg_state_dict, path, server_round, a, model, testloaders,
 #     for AP, state_dict in ap_avg_state_dict.items():
 #             model.load_state_dict(state_dict)
 #             loss, accuracy = test(model, testloaders[AP], device)
-#             row={}
+#             row={
+#                 "loss":{}
+
+
+#             }
 #             file.write(f"{AP} : \n\tloss: {loss} \n\taccuracy: {accuracy}\n")
 
 #             new_row = pd.DataFrame([{"Name": f"Person_{i}", "Age": 20 + i, "City": f"City_{i}"}])

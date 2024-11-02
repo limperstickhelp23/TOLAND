@@ -1,7 +1,5 @@
 import copy
-
 import argparse
-
 import pickle
 
 import os
@@ -24,8 +22,6 @@ from models import Net
 import colorama
 
 
-
-
 @hydra.main(config_path="configs", config_name="network", version_base=None)
 def cloud(cfg:DictConfig):
     omegaconf.OmegaConf.to_yaml(cfg)
@@ -35,7 +31,6 @@ def cloud(cfg:DictConfig):
 
     path = f"metrics/run_{run}/"
     os.makedirs(path, exist_ok=True)
-
 
     trainloaders, validationloaders, testloader = prepare_dataset(cfg.num_clients, cfg.batch_size, iid=cfg.iid)
 
@@ -52,9 +47,9 @@ def cloud(cfg:DictConfig):
         for aggr_round in range(aggregation_rounds):
             pool = ThreadPoolExecutor(max_workers=10)
             results = []
-
             futures = [pool.submit(local_train, i, Net(cfg.num_classes), trainloaders[i], validationloaders[i],
                                    net_state_dict, cfg.config_fit, device) for i in range(cfg.num_clients)]
+            
             #get_parameters(ap_avg_state_dict, ap_routes, i)
 
             for future in tqdm(as_completed(futures), total=len(futures), desc="Training clients"):
@@ -65,7 +60,6 @@ def cloud(cfg:DictConfig):
             ap_avg_state_dict = ap_aggregate(results, ap_routes) # {AP: avg_parameter(state_dict)}
             get_ap_metrics(ap_avg_state_dict, path, server_round, aggr_round, Net(cfg.num_classes), validationloaders, device)
             avg_params = list(ap_avg_state_dict.values())
-
 
         avg_params = list(ap_avg_state_dict.values())
         # if server_round != 0:
@@ -105,6 +99,7 @@ def ap_aggregate(results, ap_routes)-> [torch.Tensor]:
         ap_params[AP] = avg_ap_state_dict
 
     return ap_params
+
 def get_parameters(ap_state_dict, ap_routes, node_id):
     if ap_state_dict is None:
         return None
@@ -126,7 +121,6 @@ def get_ap_metrics(ap_avg_state_dict, path, server_round, a, model, testloaders,
             model.load_state_dict(state_dict)
             loss, accuracy = test(model, testloaders[AP], device)
             file.write(f"{AP} : \n\tloss: {loss} \n\taccuracy: {accuracy}\n")
-
 
 if __name__ == '__main__':
     cloud()

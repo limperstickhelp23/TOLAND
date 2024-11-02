@@ -12,14 +12,6 @@ from models import Net
 import colorama
 import json
 
-import hydra
-import omegaconf
-import numpy as np
-import torch
-from hydra.core.hydra_config import HydraConfig
-from hydra.utils import instantiate
-from omegaconf import DictConfig
-
 
 
 #TODO: Would be nice if I coudl figure out how to make it more modular
@@ -35,13 +27,7 @@ def aggregate_params(model_params):
         averaged_state_dict[key] = avg_params
     return averaged_state_dict
 
-METRIC_PATH="baselines/star/results/"
-FIGPATH="baselines/star/figures/"
-CONFIG_NAME="network"
-
-@hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
-def cloud(cfg:DictConfig):
-    omegaconf.OmegaConf.to_yaml(cfg)
+def cloud(cfg):
 
     # TODO: add to configs probably
     METRIC_PATH="baselines/star"
@@ -50,7 +36,7 @@ def cloud(cfg:DictConfig):
     DATA["cloud"]={"losses":[],"accuracies":[]}
 
     path = f"{METRIC_PATH}/results/run_{len(os.listdir(METRIC_PATH))}/"
-    # os.makedirs(path, exist_ok=True)
+    os.makedirs(path, exist_ok=True)
 
     trainloaders, validationloaders, testloader = prepare_dataset(cfg.num_clients, cfg.batch_size)
 

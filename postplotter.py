@@ -19,7 +19,6 @@ getacc=lambda s: s[s.find("accuracy:")+9:].strip(" ")
 getround=lambda s: int(s[len("round"):s.find(":")].strip(""))
 getap=lambda s: int(s[:s.find(":")].strip(""))
 
-
 def sort_dictionary(d,desc=True,key=0):
     return sorted(d.items(), key = lambda item: item[key], reverse=desc)
 
@@ -29,19 +28,15 @@ GLOB=os.path.join(RUN,METS.pop())
 METS=sorted(METS, key=lambda s: int(s.split('_')[-1]))
 print(METS)
 
-
 with open(GLOB, "r") as f:
     x=[line.strip("\n") for line in f.readlines()]
 
-
 def parse_ap_data():
     apoints, key = {}, 0
-
     for eval in METS:
         local=sorted(os.listdir(os.path.join(RUN,eval))).pop()
         with open(os.path.join(RUN,eval,local), "r") as f:
             y=f.readlines()
-
         for (n,line) in enumerate(y):
             if n%3 == 0:
                 key=getap(line)
@@ -49,8 +44,7 @@ def parse_ap_data():
                     apoints[key]=[]
             if n%3 == 2:
                 a=float(getacc(line))
-                apoints[key].append(a)
-            
+                apoints[key].append(a)        
     return apoints
 
 def star():

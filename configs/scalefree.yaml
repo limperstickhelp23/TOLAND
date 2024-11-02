@@ -1,5 +1,5 @@
-num_rounds: 10
-num_clients: 10
+num_rounds: 12
+num_clients: 100
 batch_size: 20
 num_classes: 10
 aggregation_rounds: 1
@@ -15,5 +15,8 @@ defaults:
   - model: net
   - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
 
-#meta
-plot_colormap: viridis
+#meta stuff
+plot_colormap: gist_earth  # turbo, jet, viridis nipy_spectral brg
+save_results: True
+metric_path: "baselines/scalefree/results/"
+figure_path: "baselines/scalefree/figures/"

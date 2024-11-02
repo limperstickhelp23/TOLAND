@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch
 from typing import List
 
-# TODO -- replace possibly with color maps for more aesthetic plots
+# NOTE: manual color map | use built-ins from matplotlib
 COLORS=[
     "red","blue","gold","green","lavender","magenta","orange","grey","firebrick","brown","tab:blue","darkgreen","indigo"
     "black", "teal", "bisque", "mediumturquoise", "darkviolet"
@@ -40,7 +40,6 @@ def aggregate_params(model_params):
         averaged_state_dict[key] = avg_params
 
     return averaged_state_dict
-
 
 class Net(nn.Module):
     """A simple CNN suitable for simple vision tasks."""
@@ -77,7 +76,6 @@ class Device:
         
         """NOTE
             Device stores a copy of the community it is assigned to in the parent point attribute
-
         """
 
     def set_lambda(self,λ):
@@ -96,7 +94,7 @@ class Device:
         return
 
 class MobileNet:
-    def __init__(self,num_devices=10,λ=10,perceptual_map="rainbow",num_classes=10):
+    def __init__(self,num_devices=10,num_classes=10,perceptual_map="rainbow",λ=10):
         
         self.N=num_devices # self.devices={}
         self.device_list=[Device(i,λ=λ,num_classes=num_classes) for i in range(self.N)]
@@ -160,6 +158,10 @@ class MobileNet:
         self.GEN.erdos_renyi(p,num_edges,allow_isolates)
         self.NXG1=nx.from_numpy_array(self.GEN.A)
         self.populate_edge_weights()
+    
+    def set_star_topology(self):
+        self.GEN.A = np.zeros([self.N+1,self.N+1])
+        self.NXG1=nx.from_numpy_array(self.GEN.A)
 
     def set_sw_topology(self, p=.005,k=2):
         self.reset_topologies()
@@ -194,6 +196,7 @@ class MobileNet:
                 self.NXG1.add_edge(
                     k,v,weight=self.Euclidean(self.device_list[k], self.device_list[v])
                 )
+            # server_weight()
         # self.calculate_topology_cost() #TODO
         return
                 
@@ -220,8 +223,31 @@ class MobileNet:
                 n=self.routes[k][1] # Add first neighbor ( assume routes are sorted)
                 self.NXG2.add_edge(k,n, weight=self.NXG1.edges[(k,n)]["weight"])
         return
+    
+    def make_derived_network(self, memberships: dict=None):
+        """ Taking Initial Input (NXG1) -- usually the proximity graph --
+            create the derived graph which is either based on commmunities/ hub assignments etc.
+            
+            The derived graph also specifies the exact path of communication back to Hub. 
+            This method should be extended by a particular algorithm.
+        """
+        if memberships != None: 
+            self.ap_member_map=memberships
+        
+        for (AP,members) in self.ap_member_map.items():
+            for k in members:
+                self.NXG2.nodes[k]["hub"]=AP
+                if (k in self.curr_apoints) or (len(self.routes[k])<1):
+                    continue
+                else:
+                    n=self.routes[k][1] # Add first neighbor ( assume routes are sorted)
+                    self.NXG2.add_edge(k,n, 
+                        weight = self.Euclidean(self.device_list[k],self.device_list[n])
+                    )
+        return
 
     def find_closest_point(self,node,top=1,weight="weight"):
+        """Iterate Over Hubs and Select the Best One"""
         G=self.NXG1 if (top == 1) else self.NXG2
         min_dist,best_route,assign=1e8,[],-1
         random.shuffle(self.curr_apoints)
@@ -236,6 +262,7 @@ class MobileNet:
         return assign, best_route
 
     def select_access_points_on_betweenness(self):
+        """Betweenness Centrality Determines Hubs"""
         (access_points,_)=betweeness_rule(self.NXG1,top=self.num_apoints,weight='weight')
         self.curr_apoints=list(access_points)
         self.edge_nodes=list(set(self.NXG1.nodes)-set(access_points))
@@ -243,7 +270,8 @@ class MobileNet:
         self.reset_colors()     
         return
 
-    def generate_access_point_assignments(self):
+    def generate_access_point_assignments(self): 
+
         self.isolates=[]
         self.assignments["AP"]=self.curr_apoints
         ## assign devices
@@ -277,45 +305,45 @@ class MobileNet:
                     self.curr_apoints.append(pt)
         return
 
-    def generate_assignments(self, weight=None):
+    # def generate_assignments(self, weight=None):## TODO: DEPRECATE
 
-        """ TODO: DEPRECATE/LEGACY -- this is specifically structured for making yaml files
-        """
+    #     """ TODO: DEPRECATE/LEGACY -- this is specifically structured for making yaml files
+    #     """
         
-        assignments,isolates,self.routes={},[],{}
-        (access_points,_)=betweeness_rule(self.NXG1,top=self.num_apoints,weight=weight)
-        self.curr_apoints=assignments["AP"]=list(access_points)
-        self.reset_colors()
-        peripherals=list(set(self.NXG1.nodes)-set(access_points))
+    #     assignments,isolates,self.routes={},[],{}
+    #     (access_points,_)=betweeness_rule(self.NXG1,top=self.num_apoints,weight=weight)
+    #     self.curr_apoints=assignments["AP"]=list(access_points)
+    #     self.reset_colors()
+    #     peripherals=list(set(self.NXG1.nodes)-set(access_points))
 
-        for ap in self.curr_apoints:
-            assignments[ap]={"access_point":ap, "route":[ap]} 
+    #     for ap in self.curr_apoints:
+    #         assignments[ap]={"access_point":ap, "route":[ap]} 
 
-        for n in peripherals:
-            if n in self.curr_apoints:
-                print("Error -- AP should be excluded:", n, self.curr_apoints)
-                return
-            (parent,route)=self.find_closest_point(n,weight=weight)
-            self.routes[n]=route
-            if (route == []):
-                isolates.append(n)
-                assignments[n]={"access_point":n, "route":[n]}
-            else:
-                assignments[n]={"access_point":parent, "route":route}
-                assignments[parent]["route"].append(n)
+    #     for n in peripherals:
+    #         if n in self.curr_apoints:
+    #             print("Error -- AP should be excluded:", n, self.curr_apoints)
+    #             return
+    #         (parent,route)=self.find_closest_point(n,weight=weight)
+    #         self.routes[n]=route
+    #         if (route == []):
+    #             isolates.append(n)
+    #             assignments[n]={"access_point":n, "route":[n]}
+    #         else:
+    #             assignments[n]={"access_point":parent, "route":route}
+    #             assignments[parent]["route"].append(n)
 
-        if len(isolates) > 0:
-            assignments["AP"].extend(isolates)
+    #     if len(isolates) > 0:
+    #         assignments["AP"].extend(isolates)
  
-            # self.ap_color_map={ap: clist[n] for (n,ap) in enumerate(self.curr_apoints)}
+    #         # self.ap_color_map={ap: clist[n] for (n,ap) in enumerate(self.curr_apoints)}
 
-        self.assignments=assignments
-        self.ap_member_map={k: v['access_point'] for (k,v) in assignments.items() if k != "AP"}
-        self.reset_colors()
-        # for (k,v) in self.routes.items():
-        #     print(k, " ", v)
+    #     self.assignments=assignments
+    #     self.ap_member_map={k: v['access_point'] for (k,v) in assignments.items() if k != "AP"}
+    #     self.reset_colors()
+    #     # for (k,v) in self.routes.items():
+    #     #     print(k, " ", v)
 
-        return assignments
+    #     return assignments
 
     def assignments_to_yaml(self, filename="sim_config.yaml"):
         with open(filename,"w") as f:
@@ -464,8 +492,6 @@ class MobileNet:
 
         return ap_params
 
-
-
 ## TODO:
 # def cost_of_route(route,threshold=10):
 
@@ -536,11 +562,13 @@ class GraphGenerator:
         self.reset()
         nodes=set([i for i in range(self.N)])
         seeds,sampler = [],[]
-
+        
         # seed
-        for n in range(num_seeds):
+        for _ in range(num_seeds):
             seed=random.sample(list(nodes),k=1)[0]
-            nodes.remove(seed), seeds.append(seed)
+            nodes.remove(seed)
+            seeds.append(seed)
+        print(seeds)
         
         # randomly connect
         for _ in range(np.random.randint(12,24)): # num pulls=np.random.randint(12,24)
