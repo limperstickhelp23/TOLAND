@@ -1,43 +1,14 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-import geopandas as gpd
+# import geopandas as gpd #NOTE: dont need this yet
 from matplotlib.animation import FuncAnimation
-import osmnx as ox
+# import osmnx as ox #NOTE: or this
 import matplotlib.image as mpimg
 
 # Choose Hours
 START_HOUR=8
 STOP_HOUR=19
-
-def map_of_austin_opmnx(fig,ax):
-    """WARNING: 
-        Will not load the larger long/latitiude range or is extremely slow
-
-        Looking for other solutions (like screenshot of Folium view)
-    """
-    # Define the latitude and longitude range
-    north, south, east, west = 31.00, 29.00, -96.5, -98.00
-
-    north, south, east, west = 30.3, 30.25, -97.70, -97.75
-
-    # Create a bounding box for the specified area
-    bounding_box = (north, south, east, west)
-
-    # Download the street network for the bounding box
-    # graph = ox.graph_from_bbox(north, south, east, west, network_type='drive')
-    buildings = ox.geometries_from_bbox(north, south, east, west, tags={'building': True})
-    water = ox.geometries_from_bbox(north, south, east, west, tags={'natural': 'water'})
-    parks = ox.geometries_from_bbox(north, south, east, west, tags={'leisure': 'park'})
-
-    # Plot buildings on the map
-    buildings.plot(ax=ax, color='lightgray')
-    parks.plot(ax=ax, color='lightgreen',alpha=.5)
-    water.plot(ax=ax, color='skyblue',alpha=.8)
-    # ox.plot_graph(graph, node_size=0, edge_color='black', ax=ax,show=False)
-    print("stop showing")
-
-    # plt.title('Buildings and Street Network of Austin, Texas')
 
 
 def load_austin_screenshot(ax):
@@ -112,6 +83,35 @@ if __name__ == "__main__":
     plot_all_hours(logs)
 
 
+
+# def map_of_austin_opmnx(fig,ax):
+#     """WARNING: 
+#         Will not load the larger long/latitiude range or is extremely slow
+
+#         Looking for other solutions (like screenshot of Folium view)
+#     """
+#     # Define the latitude and longitude range
+#     north, south, east, west = 31.00, 29.00, -96.5, -98.00
+
+#     north, south, east, west = 30.3, 30.25, -97.70, -97.75
+
+#     # Create a bounding box for the specified area
+#     bounding_box = (north, south, east, west)
+
+#     # Download the street network for the bounding box
+#     # graph = ox.graph_from_bbox(north, south, east, west, network_type='drive')
+#     buildings = ox.geometries_from_bbox(north, south, east, west, tags={'building': True})
+#     water = ox.geometries_from_bbox(north, south, east, west, tags={'natural': 'water'})
+#     parks = ox.geometries_from_bbox(north, south, east, west, tags={'leisure': 'park'})
+
+#     # Plot buildings on the map
+#     buildings.plot(ax=ax, color='lightgray')
+#     parks.plot(ax=ax, color='lightgreen',alpha=.5)
+#     water.plot(ax=ax, color='skyblue',alpha=.8)
+#     # ox.plot_graph(graph, node_size=0, edge_color='black', ax=ax,show=False)
+#     print("stop showing")
+
+#     # plt.title('Buildings and Street Network of Austin, Texas')
 
 
 
