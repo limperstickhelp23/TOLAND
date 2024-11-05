@@ -4,8 +4,9 @@ import numpy as np
 import networkx as nx
 import torch.nn as nn
 
-#UTILS
+#NOTE: Some UTILS
 def compute_cosim_metric(m1: nn.Parameter, m2: nn.Parameter):
+    #TODO/NOTE: this has to change if we move to using files instead
     sim,cos=0, nn.CosineSimilarity(dim=0, eps=1e-6)
     for (p1,p2) in zip(m1,m2):
         layer_sim=abs(cos(p1.data.flatten(),p2.data.flatten()).item())
@@ -13,31 +14,84 @@ def compute_cosim_metric(m1: nn.Parameter, m2: nn.Parameter):
     return sim
 
 def compute_device_model_cosim_metric(dvc1, dvc2):
+    #TODO/NOTE: this has to change if we move to using files instead
     m1=dvc1.model.parameters()
     m2=dvc2.model.parameters()
     return compute_cosim_metric(m1,m2)
 
 def compute_device_to_community_cosim(dvc1, dvc2):
+    #TODO/NOTE: this has to change if we move to using files instead
     m1=dvc1.model.parameters()
     m2=dvc2.community_model.parameters()
     return compute_cosim_metric(m1,m2)
 
-class Algorithm(MobileNet):
+#NOTE NEW Co-Sim Functions
+def compute_cosim_metric_from_state(state_dict1: dict, state_dict2: dict):
+    sim = 0
+    cos = nn.CosineSimilarity(dim=0, eps=1e-6)
+    # Iterate through the keys in the state dictionaries
+    for key in state_dict1:
+        if key in state_dict2:    # Flatten the tensors and compute cosine similarity
+            sim += abs(cos(state_dict1[key].flatten(), state_dict2[key].flatten()).item())
+    return sim
+
+def compute_model_to_community_cosim(dvc1: Device, dvc2: Device):
+    return compute_cosim_metric_from_state(dvc1.get_model(),dvc2.get_community_model())
+
+def compute_model_to_model_cosim(dvc1: Device, dvc2: Device):
+    return compute_cosim_metric_from_state(dvc1.get_model(),dvc2.get_model())
+
+
+class Algorithm(Network):
     """ 
         Honestly... this could probably be added to Mobile Net Class.
         It is just another wrapper for a few abstract methdods hanlding community assignment and local aggregating.
     """
     
-    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo"):
-        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map)
+    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo",threshold=10):
+        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map,threshold=threshold)
         self.ap_param_stacks={}
         self.sf_seeds=max(2,int((.10)*num_devices))
     
-    def init_community_models(self):
-        for (ap,dvcs) in self.ap_member_map.items():
-            self.device_list[ap].community_model.load_state_dict(self.device_list[ap].model.state_dict())
-            for dvc in dvcs:
-                self.device_list[dvc].community_model.load_state_dict(self.device_list[ap].model.state_dict())
+    def run_global_round_setup_steps(self,round=0):
+        print("Implement in child classes")
+        
+        #NOTE: i think generally just contains these 2 steps
+        
+        # Simulate Movements
+        self.update_coordinates(round) # If movement enabled
+        
+        # Re-linking Algorithm
+        self.run_linking_algorithm() # Custom relinking methods
+        
+        # whatever else TODO before training 
+      
+        return None
+    
+    def run_local_aggregation_round(self):        
+        """ The local aggregation round maps parameters internally.
+                This way each device knows its community parameters.
+        """
+        ap_avg_state_dict={} #NOTE: temp variable to match back semantically to cloud.py
+        for (AP,members) in self.ap_member_map.items():
+            #NOTE New Step: First load param_stacks based on files and current ap_member_map
+            # ap_parameter_stack=[torch.load(self.device_list[member].model_path) for member in members]
+            ap_avg_state_dict[AP]=aggregate_params(
+                [torch.load(self.device_list[member].model_path) for member in members]
+            )
+        #NOTE For additional logic, override in child class
+        return ap_avg_state_dict
+    
+    def run_linking_algorithm(self):
+        #TODO: just a default -- in general this should be unique to each algorithm 
+        self.build_proximity_graph(threshold=10)
+        self.select_access_points_on_betweenness()
+        print(self.ap_member_map)
+
+    def map_results_to_files(self,results):
+        for (n,model,device) in results:
+            # print(type(model), " " , len(model), " ", model[0], " ",model[2])
+            torch.save(model, self.device_list[n].model_path)
     
     def assign_communities(self):
         """
@@ -47,47 +101,19 @@ class Algorithm(MobileNet):
                 ap_param_stacks: Directly Looks Up From Each Device Model
         """
         self.ap_member_map={ap:[] for ap in self.curr_apoints}
-        self.ap_param_stacks={ap:[] for ap in self.curr_apoints}
-        
+
         for d in self.device_list:
             self.ap_member_map[d.parent_point].append(d.id)
-            self.ap_param_stacks[d.parent_point].append(d.model.state_dict()) #NOTE: can use .parameters() or .state_dict()
+            # self.ap_param_stacks[d.parent_point].append(d.model.state_dict()) #NOTE: DEPRECATE not needed anymore
         
         self.reset_colors() # NOTE: whoops forgot this before
-    
-    def map_results(self,results):
-        """
-        For Integration:
-            Since we train externally, this function facilitates mappings (either stored in the object or in files)
-            between the Algorithm internal representation of devices to the externally trained models
-        
-        """
-        results={r[0]:r[1] for r in results} # convert to dictionary
-        for (AP, peers) in self.ap_member_map.items():
-            for peer in peers:
-                self.device_list[peer].model.load_state_dict(results[peer]) # attribute results to devices
-        return
-    
-    def local_aggregation_round(self):
-        """ The local aggregation round maps parameters internally.
-                This way each device knows its community parameters.
-        """
-        ap_avg_state_dict={} #NOTE: temp variable to match back semantically to cloud.py
-        for (AP,members) in self.ap_member_map.items():
-            community_state_dict=aggregate_params(self.ap_param_stacks[AP])
-            self.device_list[AP].model.load_state_dict(community_state_dict)
-            for idx in members:
-                self.device_list[idx].community_model.load_state_dict(community_state_dict)
-            ap_avg_state_dict[AP]=community_state_dict
-
-        return ap_avg_state_dict
 
 #BASELINE
 class Baselines(Algorithm):
     """ Set Baseline Topologies
     """
-    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo",topology="star"):
-        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map)
+    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo",topology="star",threshold=10):
+        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map,threshold=threshold)
         self.dynamic=False
         self.topology=topology
 
@@ -114,7 +140,6 @@ class Baselines(Algorithm):
         
         print(f"Init: {self.topology}")
         self.select_access_points_on_betweenness()
-        self.init_community_models()
         self.make_derived_network()
         self.assign_communities()
 
@@ -122,6 +147,9 @@ class Baselines(Algorithm):
 class LocalizedPreferentialAttachment(Algorithm):
     """ TODO:
         Set Hubs Based on Preferential Attachment mechanism but where it is also based on location at every round. 
+        
+        Essentially: Scale Free + Proximity
+
         NOTE: 
         This could be used as a first step and cosine reassignemnt could be used as a second. Or it could do well on its own. 
         Compare IID and Non-IID cases.
@@ -131,19 +159,28 @@ class LocalizedPreferentialAttachment(Algorithm):
         return
 
 class ScaleFreeRewiring(Algorithm): 
-    """ The Difference here from the baseline is that each round is a new scale-free topology
-    
-        Will this help or hurt ?
+    """ The Difference here from the baseline is that each round is a new scale-free topology. 
+    Comparable to Star ? What about if we re-use the same ScaleFree Topology ?
     """
     
-    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo"):
-        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map)
-    
-    def rewire_round(self,round_num=0,folder="static_updates/",save=False,weight="weight"):
-        """ The Static Algorithm will simply generate a new selected
-            topology type at each round, but without any device movement.
+    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo",threshold=10):
+        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map,threshold=threshold)
+        ratio=.07
+        self.sf_seeds=max(int(ratio*num_devices),2)
+
+    def run_global_round_setup_steps(self, round=0):
+        
+        self.update_coordinates(round)
+        self.run_linking_algorithm(round_num=round)
+        return 
+
+    def run_linking_algorithm(self,round_num=0,folder="static_updates/",save=False,weight="weight"):
+        """ Cases:
+                - Static Devices/Static Topology
+                - Static Device/Changing Topology
+                - Mobile Devices/Changing Topology
         """
-        self.set_sf_topology(num_seeds=self.sf_seeds)
+        self.set_sf_topology(num_seeds=self.sf_seeds) #NOTE: randomly generates new Scale Free Graph
         self.select_access_points_on_betweenness()
         self.make_derived_network()
         self.assign_communities()
@@ -158,50 +195,42 @@ class CosineReassignment(Algorithm):
         Naive Idea:
             - First Round everyone trains and the community models are aggregated
             - Then everyone gets back the "community model"
-            - Assuming they have a copy of their own local model, next they compare their
-            own local model to each of their neighbors community models (and their own)
+            - Next, compare own local model to each of their neighbors community models
             - Then they reassign themselves to the community with most similarity
             - Then they broadcast their desired community to devices around them
+            
+        TODO: ReLinking/ Rerouting Steps
             - Any common communities will form a link from proximity neighbors and if none then they will remain isolated
-            - The last problem to solve now is flow of information 
+            - The last problem to solve now is flow of information / Select Aggregation Route for Lowest Cost (Decentralized Manner?)
 
-        Within Local
     """
 
-    def __init__(self,num_devices,num_classes,perceptual_map):
-        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map)
+    def __init__(self,num_devices,num_classes,perceptual_map,threshold):
+        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map,threshold=threshold)
         self.ap_param_stacks={}
+
+    def run_local_aggregation_round(self,max_iterations=3):
+        self.compare_communities(max_iters=max_iterations)  
+        return super().run_local_aggregation_round()
     
-    def rewire_round(self,round_num=0):
-        self.build_proximity_graph()
-        self.set_custom_topology(self.A)
+    def run_global_round_setup_steps(self, round=0, threshold=10):
+        self.update_coordinates(round)
+        self.run_linking_algorithm(threshold)
+        return 
+
+    def run_linking_algorithm(self,threshold=10):
+        self.threshold=threshold
+        self.build_proximity_graph() # allow_isolates = False
+        self.select_access_points_on_betweenness() 
         self.make_derived_network()
-        # self.plot_topology()
-    
-    #TODO: figure out how to connect results back to local aggregation algorithm
-    def ap_aggregate(self):
-        """
-        Integrated Version:
-            * Map results list to the Algorithm local copy of parameters
-            *TODO: streamline this -- need a better solution
-
-            *TODO: Instead of this accepting the results list, it will just do a local
-            aggregation round based ont eh current mappings
-        """
-        results=dict(results)
-
-        for (AP, peers) in self.ap_member_map.items():
-            for (AP,members) in self.ap_member_map.items():
-                community_state_dict=aggregate_params(self.ap_param_stacks[AP])
-                self.ap_params[AP]=community_state_dict
-        
+        self.assign_communities()
+        return
 
     def compare_communities(self,max_iters=10):
         """
-            NOTE: In this case, devices store parameters from both their own model and the community model.
-            Then they compare their model to the community models of their neighbors to decide whether the neighbor's 
-            community is a better fit. The baseline is cosine similarity with their current community model.
-            If no community is better now switch occurs
+            Devices store parameters from both their own model and the community model.
+            Then compare their model to the community models of their neighbors to decide if the neighbor's 
+            community is a better fit. Also compare to their own current community model. If no community is better then no switch occurs
         """
         changes=1000
 
@@ -218,13 +247,13 @@ class CosineReassignment(Algorithm):
                     continue
                 
                 ## Similarity with "self" -- community model
-                max_cosim=compute_device_to_community_cosim(self.device_list[dvc],self.device_list[dvc])
+                max_cosim=compute_model_to_community_cosim(self.device_list[dvc],self.device_list[dvc])
                 max_nbr,max_color=dvc,self.device_list[dvc].color
             
                 for nbr in self.NXG1.neighbors(dvc):
                     
                     # Similarity with it's neighbor's community
-                    cosim=compute_device_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
+                    cosim=compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
                     if cosim > max_cosim:
                         max_cosim,max_nbr,max_color=cosim,nbr,self.device_list[nbr].color
                         self.device_list[dvc].parent_point = self.device_list[nbr].parent_point
@@ -241,8 +270,9 @@ class CosineReassignment(Algorithm):
         # Re-Set Communities after Comparisons
         self.assign_communities()
         return
-
-
+#-------------------------------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------------------------------
+###NOTE: Other Ideas | Can Ignore | Prototype New Ideas Etc. 
 class EfficientLessCentralizedServer(Algorithm):
     def __init__(self,num_devices=20):
         super().__init__(n=num_devices) 
@@ -298,17 +328,18 @@ class MinSpanTreeServer(Algorithm):
         # if (save):
         #     self.assignments_to_yaml(os.path.join(folder,f"round_{round_num}.yaml"))
 
-class MaxEntropyServer(MobileNet):
+class MaxEntropyServer(Algorithm):
     def __init__(self,num_devices=20):
         super().__init__(n=num_devices)   
 
 ## NOTE: Add New Algorithms here
-class MyNewAlgorithm(MobileNet):
+class MyNewAlgorithm(Algorithm):
     def __init__(self,num_devices=20):
         super().__init__(n=num_devices)   
     
     def rewire_round(self):
         return
+
 
 
 

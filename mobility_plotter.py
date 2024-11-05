@@ -99,8 +99,6 @@ def plot_all_hours(logs):
 # TODO (?) Pick new devices based on this ? Top 100 and they also have to be inside the boundaries ??
 
 
-
-
 if __name__ == "__main__":
     logs={}
     for n in range(100):

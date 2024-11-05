@@ -11,12 +11,15 @@ from torch import nn
 import torch.nn.functional as F
 import torch
 from typing import List
+from pathlib import Path
+import os
 
 # NOTE: manual color map | use built-ins from matplotlib
 COLORS=[
     "red","blue","gold","green","lavender","magenta","orange","grey","firebrick","brown","tab:blue","darkgreen","indigo"
     "black", "teal", "bisque", "mediumturquoise", "darkviolet"
 ]
+ROOT=Path(__file__).resolve().parent.parent
 
 # Utilities
 def get_sampled_colors(n, colormap='viridis'):
@@ -46,102 +49,110 @@ def aggregate_params(model_params):
 
     return averaged_state_dict
 
-class Net(nn.Module):
-    """A simple CNN suitable for simple vision tasks."""
-
-    def __init__(self, num_classes: int) -> None:
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 4 * 4, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, num_classes)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 4 * 4)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
-
 class Device:
-    def __init__(self,id=0, x_max=100,y_max=100, λ=10,type=[4,5], num_classes=10):
-        self.x=np.random.randint(-y_max,y_max)
-        self.y=np.random.randint(-x_max,x_max)
-        self.λ=λ
-        self.id=id
-        self.model=Net(num_classes)
-        self.community_model=Net(num_classes)  #NOTE: really these are community parameters, after a global round they are the global params
-        self.color='red'
-        self.parent_point=0 #NOTE: not sure what a good deafault is (like -- the server maybe)
-        #self.community = (0,"red")
+    def __init__(self,id=0,num_classes=10, x_max=100,y_max=100, λ=10,type=[4,5]):
         
-        """NOTE
-            Device stores a copy of the community it is assigned to in the parent point attribute
-        """
+        self.id=id
+        self.parent_point=0 #NOTE: AP it is currently assigned to
+        self.x=30.3
+        self.y=71.7
+        self.color='red' #TODO :deprecate this
+        self.parent_point=0
 
-    def set_lambda(self,λ):
-        self.λ=λ
+        # NOTE: New way stores path to param lookups instead of models themselves
+        self.project_root=Path(__file__).resolve().parent.parent
+        self.model_root=os.path.join(os.path.join(self.project_root,"devices"),"models")
+        self.model_path=f"{self.model_root}/{id}.pth"
+        self.commmunity_model_path=f"{self.model_root}/{self.parent_point}.pth"
+        self.coordinate_path=f"{self.project_root}/devices/movements/log_{self.id}.pkl"
+
+        # Legacy Stuff
+        # NOTE: Legacy -- randomly assigned initial positions, instead now we read from device_movements/
+        # self.x=np.random.randint(-y_max,y_max)
+        # self.y=np.random.randint(-x_max,x_max)
+
+        # NOTE: DELETE these once switching over to files is done
+        # self.model=Net(num_classes)
+        # self.community_model=Net(num_classes)  #NOTE: really these are community parameters, after a global round they are the global params
+
     
-    def select_distance(self):
-        return np.random.exponential(scale=5)
+    def assign_parent(self,apid):
+        self.parent_point=apid
+        self.commmunity_model_path=f"{self.model_root}/{self.parent_point}.pth"
+
+    def get_model(self):
+        return torch.load(self.model_path)
     
-    def new_coordinate(self):
-        r=self.select_distance()
-        θ=np.random.uniform(0,2*pi)
-        self.x=self.x+r*np.cos(θ)
-        self.y=self.y+r*np.sin(θ)
-    
+    def get_community_model(self):
+        return torch.load(self.community_model_path)
+
     def compute_cosines():
+        #NOTE:  possibly could put this here
         return
+    
+    def set_step_coordinates(self,step=0):
+        #NOTE: update positions at every GLOBAL round
+        row=pd.read_pickle(self.coordinate_path).iloc[step]
+        self.x,self.y=row['geolat'],row['geolong']
+        return
+    
+#NOTE: Device Level Calcualtions
+# def compare_device_cosines_new(d1: Device, d2: Device): #(Pass Device Objects)
+#     """TODO: test with training loop -- 
+#     """
+#     state_dict_1=d1.get_model()
+#     state_dict_2=d2.get_community_model()
+#     #return compute_cosine_sim(state_dict_1,state_dict_2)
+#     print(state_dict_2.keys())
+#     print(state_dict_1.keys())
+#     return 0
 
-class MobileNet:
-    def __init__(self,num_devices=10,num_classes=10,perceptual_map="rainbow",λ=10):
+def Euclidean(d1:Device, d2:Device):
+        """NOTE: probably just rewrite this at the Network level to update distances every global round"""
+        return np.sqrt(
+            np.linalg.norm( np.array([d1.x,d1.y]) - np.array([d2.x,d2.y]))
+    )
+
+class Network:
+    def __init__(self,num_devices=10,num_classes=10,perceptual_map="nipy_spectral",threshold=10):
         
         self.N=num_devices # self.devices={}
-        self.device_list=[Device(i,λ=λ,num_classes=num_classes) for i in range(self.N)]
-        self.D = np.zeros([self.N,self.N])
+        self.device_list=[Device(i,num_classes=num_classes) for i in range(self.N)]
+        self.D = np.zeros([self.N,self.N]) #NOTE: not in use
         self.A = np.zeros([self.N,self.N])
-        self.d_max = 25
         self.curr_apoints = []
         self.num_apoints = 5
-        self.ap_color="black"
-        self.reset_topologies()
-        self.topology_cost=0
-        self.AGG_COST = 100
+        self.ap_color="black" # not really using this
         self.assignments = {} #NOTE: this might be legacy -- directly corresponds to the old file structure (AP, route: etc.)
         self.ap_member_map = {} #NOTE: key AP: values list of everyone assigned to it
         self.routes = {}
         self.ap_params = {}  #NOTE/TODO: store parameters in sim object, then devices can look up parameters
-        # self.server=Device() #TODO/ Store here ?
-        # self.server.x,self.server.y = 98,98
+
         self.GEN=GraphGenerator(num_devices)
-        self.threshold = 10
+        self.threshold = threshold
         self.colormap = perceptual_map
         self.num_colors=self.num_apoints+1
-        print(perceptual_map)
+
+        #NOTE: work on moving the plotting stuff to be totally independent
         self.cmap=get_uniform_colors(n=self.num_colors,colormap=perceptual_map) # TODO make even perceptual spacing dynamically at init
         self.reset_colors()
-        """
-            TODO: Legacy stuff
-                Need to clean up some of the data structures. Assignments is left over from making yaml files accoriding to "route"
+        self.reset_topologies()
 
-            NOTE:
-            Instead, try separating out:
-                - memberships: key= access point , values = everyone currently assigned to that point
-                - routes: store the actual path to AP for calculating communication cost
-                - assignments: key: device id, value: parent point id ( sometimes is convenient)  TODO: remove and use Device attribute instead
-            Piece together the yaml files from these attributes however they should work
-        """
+        #NOTE: choose location of server or somehow otherwise compute the cost of talking to server
+        # self.server=Device() 
+        # self.server.x,self.server.y = 98,98
+        
     
     def Euclidean(self,d1:Device, d2:Device):
         return np.sqrt(
             np.linalg.norm( np.array([d1.x,d1.y]) - np.array([d2.x,d2.y]))
-        )
-    
+    )
+    def update_coordinates(self,step):
+        """NOTE: the 'movement' function from data
+        """
+        for d in self.device_list:
+            d.set_step_coordinates(step)
+
     def reset_topologies(self):
         self.A = np.zeros([self.N,self.N])
         self.NXG1 = nx.from_numpy_array(self.A) # sparse communities
@@ -149,7 +160,10 @@ class MobileNet:
         self.topology_cost = 0
 
     def reset_colors(self, ap_color=None):
-        # Assign/ populate colors from the ap_member_map and matpltlib color_map
+        # NOTE/TODO: Possibly Change this to do all the plotting after the fact
+        """
+            Assign/ populate colors from the ap_member_map and matpltlib color_map
+        """
         self.colors={}
         for (n,(ap,vals)) in enumerate(sorted(self.ap_member_map.items())):
             # self.device_list[ap].color=self.cmap[n]
@@ -163,6 +177,7 @@ class MobileNet:
         self.server.y = pos[1]
         return
     
+    ## NOTE: Creating Baseline Topologies (TODO: possibly move these to a Diffferent Level)
     def set_er_topology(self, p=.05,num_edges=100,allow_isolates=False):
         self.reset_topologies()
         self.GEN.erdos_renyi(p,num_edges,allow_isolates)
@@ -191,8 +206,9 @@ class MobileNet:
         self.NXG1=nx.from_numpy_array(A)
         self.populate_edge_weights()
 
-    def build_proximity_graph(self):
+    def build_proximity_graph(self,threshold=10):
         self.A=np.zeros([self.N,self.N])
+        self.threshold=threshold
         for i in range(self.N):
             for j in range(i):
                 if self.Euclidean(self.device_list[i],self.device_list[j]) < self.threshold:
@@ -206,7 +222,6 @@ class MobileNet:
                 self.NXG1.add_edge(
                     k,v,weight=self.Euclidean(self.device_list[k], self.device_list[v])
                 )
-            # server_weight()
         # self.calculate_topology_cost() #TODO
         return
                 
@@ -223,7 +238,7 @@ class MobileNet:
                 c=self.ap_color_map[AP] 
             else:
                 c=self.ap_color
-            
+
             self.NXG2.nodes[k]["hub"]=AP
             self.colors[c].append(k), self.communities[AP].append(k)
             
@@ -235,7 +250,14 @@ class MobileNet:
         return
     
     def make_derived_network(self, memberships: dict=None):
-        """ Taking Initial Input (NXG1) -- usually the proximity graph --
+        """ NOTE:
+            Encode the two-step proceess where NXG1 is assigned links (or decentralized links)
+            NXG2 stores the actual routes of device aggregation. 
+            In  milestone 1, the first topology was used to assign the betweeness values,
+            then NXG2 was derived from this where each node is explicitly assigned to an AP
+        
+        
+            Taking Initial Input (NXG1) -- usually the proximity graph --
             create the derived graph which is either based on commmunities/ hub assignments etc.
             
             The derived graph also specifies the exact path of communication back to Hub. 
@@ -256,6 +278,7 @@ class MobileNet:
                     )
         return
 
+    ## NOTE: Betweenness Logic
     def find_closest_point(self,node,top=1,weight="weight"):
         """Iterate Over Hubs and Select the Best One"""
         G=self.NXG1 if (top == 1) else self.NXG2
@@ -315,58 +338,54 @@ class MobileNet:
                     self.curr_apoints.append(pt)
         return
 
-    # def generate_assignments(self, weight=None):## TODO: DEPRECATE
-
-    #     """ TODO: DEPRECATE/LEGACY -- this is specifically structured for making yaml files
-    #     """
-        
-    #     assignments,isolates,self.routes={},[],{}
-    #     (access_points,_)=betweeness_rule(self.NXG1,top=self.num_apoints,weight=weight)
-    #     self.curr_apoints=assignments["AP"]=list(access_points)
-    #     self.reset_colors()
-    #     peripherals=list(set(self.NXG1.nodes)-set(access_points))
-
-    #     for ap in self.curr_apoints:
-    #         assignments[ap]={"access_point":ap, "route":[ap]} 
-
-    #     for n in peripherals:
-    #         if n in self.curr_apoints:
-    #             print("Error -- AP should be excluded:", n, self.curr_apoints)
-    #             return
-    #         (parent,route)=self.find_closest_point(n,weight=weight)
-    #         self.routes[n]=route
-    #         if (route == []):
-    #             isolates.append(n)
-    #             assignments[n]={"access_point":n, "route":[n]}
-    #         else:
-    #             assignments[n]={"access_point":parent, "route":route}
-    #             assignments[parent]["route"].append(n)
-
-    #     if len(isolates) > 0:
-    #         assignments["AP"].extend(isolates)
- 
-    #         # self.ap_color_map={ap: clist[n] for (n,ap) in enumerate(self.curr_apoints)}
-
-    #     self.assignments=assignments
-    #     self.ap_member_map={k: v['access_point'] for (k,v) in assignments.items() if k != "AP"}
-    #     self.reset_colors()
-    #     # for (k,v) in self.routes.items():
-    #     #     print(k, " ", v)
-
-    #     return assignments
-
     def assignments_to_yaml(self, filename="sim_config.yaml"):
+        """ NOTE: WIP -- needs updating
+        """
         with open(filename,"w") as f:
             yaml.dump(self.assignments,f,default_flow_style=False)
         return 
 
     def positions_to_yaml(self,path="node_coordinates.yaml"):
+        #NOTE: not necessary
         with open(path,"w") as f:
             yaml.dump(
                 {d.id: [d.x,d.y] for d in self.device_list},f,default_flow_style=False
             )
         return
     
+    def plot_positions(self):
+        pos=self.get_positions()
+        NXG=self.NXG2
+        fig=plt.figure()
+        nodes={"lightseagreen": [dvc.id for dvc in self.device_list]}
+        for node_color, nodelist in nodes.items():
+            nx.draw_networkx_nodes(NXG, pos, nodelist=nodelist, node_color=node_color)
+        return
+
+    def calculate_topology_cost(self):
+        self.topology_cost = 0
+        for u, v, data in self.NXG2.edges(data=True):  #NOTE: for now this is simple distance squared
+            self.topology_cost += (data['weight'])**2
+        #TODO: also add the cost of aggregating each model here
+        self.topology_cost += self.NXG2.number_of_edges()*self.AGG_COST
+        print("Cost: ", self.topology_cost)
+        return
+    
+    def get_positions(self):
+        pos=[]
+        for dvc in self.device_list:
+            pos.append((dvc.x,dvc.y))
+        return pos
+
+    def ap_aggregate(self, results)-> List[torch.Tensor]:
+        ap_params = {}
+        for (AP, peers) in self.ap_member_map.items():
+            chosen_params = [result[1] for result in results if result[0] in peers]
+            self.ap_params[AP] = aggregate_params(chosen_params)
+
+        return ap_params
+    
+    #NOTE: Plotting Methods
     def plot_topology(self,top=1,edge_weights=False):
         self.plot_nodes(top)
         self.plot_edges(top,edge_weights)# NOTE: break up these steps for animation purposes
@@ -390,18 +409,6 @@ class MobileNet:
             # nx.draw_networkx_edge_labels(NXG, pos, edge_labels=rounded_edge_labels)
             for (k,v) in rounded_edge_labels.items():
                 print(k, " : ", v)
-
-    def set_topology_to_plot(self,top):
-        if top == 1:
-            NXG=self.NXG1        
-            nodes={"lightseagreen": [dvc.id for dvc in self.device_list]}
-        elif top == 2:
-            NXG=self.NXG2
-            nodes=self.colors
-        else:
-            print("error: invalid selection")
-            return
-        return (NXG,nodes)
 
     def plot_spring_communities(self):
         
@@ -444,63 +451,6 @@ class MobileNet:
                 nx.draw_networkx_labels(G, pos, {node:node}, font_size=fsize,font_weight=fweight,font_color=fontcolor,ax=ax)
             # labels = {x: x for x in G.nodes}
         nx.draw_networkx_edges(G, pos, edgelist=G.edges(),width=.35, alpha=0.55,ax=ax)
-    
-    def plot_positions(self):
-        pos=self.get_positions()
-        NXG=self.NXG2
-        fig=plt.figure()
-        nodes={"lightseagreen": [dvc.id for dvc in self.device_list]}
-        for node_color, nodelist in nodes.items():
-            nx.draw_networkx_nodes(NXG, pos, nodelist=nodelist, node_color=node_color)
-        return
-
-    def calculate_topology_cost(self):
-        self.topology_cost = 0
-        for u, v, data in self.NXG2.edges(data=True):  #NOTE: for now this is simple distance squared
-            self.topology_cost += (data['weight'])**2
-        #TODO: also add the cost of aggregating each model here
-        self.topology_cost += self.NXG2.number_of_edges()*self.AGG_COST
-        print("Cost: ", self.topology_cost)
-        return
-
-    def move(self):
-        """TODO: modify"""
-        if (self.mobile == True):
-            for d in self.device_list:
-                d.λ = max(d.λ+np.random.normal(), 1.0)
-                d.new_coordinate()
-        return
-    
-    def calculate_distance_matrix(self):
-        """TODO: delete"""
-        self.D=np.zeros([self.n,self.n])
-        for i in range(self.n):
-            for j in range(i,self.n):
-                self.D[i,j] = np.sqrt(
-                    (self.devices[i].x-self.devices[j].x)**2 
-                    + (self.devices[i].y-self.devices[j].y)**2
-                )
-        self.D = self.D + self.D.T
-    
-    def calculate_new_adjacency(self):
-        """TODO: delete"""
-        self.A = (self.D < self.d_max)*1
-        for i in range(self.n):
-            self.A[i,i]=0
-    
-    def get_positions(self):
-        pos=[]
-        for dvc in self.device_list:
-            pos.append((dvc.x,dvc.y))
-        return pos
-
-    def ap_aggregate(self, results)-> List[torch.Tensor]:
-        ap_params = {}
-        for (AP, peers) in self.ap_member_map.items():
-            chosen_params = [result[1] for result in results if result[0] in peers]
-            self.ap_params[AP] = aggregate_params(chosen_params)
-
-        return ap_params
 
 ## TODO:
 # def cost_of_route(route,threshold=10):
@@ -686,53 +636,3 @@ class GraphGenerator:
         table=self.to_adjacency_table()
         with open('er_sample.json', 'w') as fp:
             json.dump(table, fp)
-
-
-
-
-
-##==================== NOTE: DEPRECATE ============================================================
-# def rewire(self,adj_list: dict):
-#     """ This is the original topology which we use to derive communities
-#     """
-#     self.reset_topologies()
-#     G = nx.Graph()
-#     for (k,vals) in adj_list.items():
-#         devc=self.device_list[k]
-#         # devc.x
-#         for v in vals:
-#             nbr=self.device_list[v]
-#             G.add_edge(k,v, weight=self.Euclidean(
-#                 self.device_list[k],
-#                 self.device_list[v]
-#             ))
-#             #TODO: not actually sure if I need this
-#             # nx.set_node_attributes(G,devc.x,"x")
-#             # nx.set_node_attributes(G,devc.y,"y")
-#     self.NXG1 = G # this is the original topology which we use to derive communities
-
-
-# def dynamics():
-#     Net=MobileNet(n=50)
-#     steps=100
-
-#     for step in range(steps):
-
-#         # print("x: ", Net.devices[1].x)
-#         # print("y: ", Net.devices[1].y)
-
-#         Net.calculate_distance_matrix()
-#         Net.calculate_new_adjacency()
-#         # print(np.sum(Net.D))
-
-#         # display the current configuration
-#         Gx=nx.from_numpy_array(Net.A)
-#         pos=Net.get_positions()
-#         nx.draw(Gx,pos, with_labels=True, font_color="white")
-#         plt.draw()
-#         plt.pause(.15)
-#         plt.cla()
-
-#         # Update movement
-#         for i in range(len(Net.devices.values())):
-#             Net.devices[i].new_coordinate()

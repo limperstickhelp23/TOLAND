@@ -1,5 +1,11 @@
-num_rounds: 10
-num_clients: 100
+algorithm: star 
+#result metadata
+plot_colormap: nipy_spectral
+metric_path: "results/baselines/star/metrics"
+figure_path: "results/baselines/star/figures"
+
+num_rounds: 2
+num_clients: 10
 batch_size: 20
 num_classes: 10
 aggregation_rounds: 1
@@ -17,7 +23,3 @@ defaults:
   - model: net
   - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
 
-#meta
-plot_colormap: viridis
-metric_path: "baselines/star/results/"
-figure_path: "baselines/star/figures/"

@@ -1,5 +1,13 @@
-num_rounds: 10
-num_clients: 100
+algorithm: cosine
+plot_colormap: nipy_spectral 
+save_results: true
+metric_path: "results/cosine_assignment/metrics"
+figure_path: "results/cosine_assignment/figures"
+
+
+# NOTE: maybe we have a way to make it compact since the following are the same for each algorithm (e.g. read in from network )
+num_rounds: 2
+num_clients: 10
 batch_size: 20
 num_classes: 10
 aggregation_rounds: 1
@@ -16,7 +24,3 @@ defaults:
   - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
 
 
-plot_colormap: nipy_spectral 
-save_results: true
-metric_path: "cosine_assignment/results"
-figure_path: "cosine_assignment/figures"
