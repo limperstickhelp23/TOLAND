@@ -1,9 +1,10 @@
-num_rounds: 12
+num_rounds: 10
 num_clients: 100
 batch_size: 20
 num_classes: 10
 aggregation_rounds: 1
-alpha: 0.5 # control how much iid needed in the dataset, lower the more non-iid.
+
+alpha: 0.1 # control how much iid needed in the dataset, lower the more non-iid. #NOTE: edeg case occurs when alpha is too small
 iid: 0 #bool value for data distribuitions
 
 config_fit: # a config that each client will receive
@@ -16,7 +17,7 @@ defaults:
   - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
 
 #meta stuff
-plot_colormap: gist_earth  # turbo, jet, viridis nipy_spectral brg
+plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
 metric_path: "baselines/scalefree/results/"
 figure_path: "baselines/scalefree/figures/"

@@ -3,6 +3,8 @@ import os
 from typing import List
 from client import test
 import pandas as pd
+import numpy as np
+from collections import Counter
 
 def aggregate_params(model_params):
     
@@ -62,6 +64,23 @@ def update_ap_metrics(ap_avg_state_dict,model,testloaders,device):
         "losses":losses, 
         "accuracies":accuracies
     }
+
+def normalize_dict(d):
+    D=np.sum([v for v in list(d.values())])
+    for (k,v) in d.items():
+        d[k]=np.round(v/D,3)
+    return d
+
+def get_class_distribution(dataloader):
+    class_counts = Counter()
+    for _, labels in dataloader:
+        class_counts.update(labels.tolist())
+    return dict(class_counts)
+
+def check_iidness(dataloader):
+    d=normalize_dict(get_class_distribution(dataloader))
+    for (k,v) in d.items():
+        print(f"{k}: {v}")
 
 
 # def get_ap_metrics_pandas(ap_avg_state_dict, path, server_round, a, model, testloaders, device):

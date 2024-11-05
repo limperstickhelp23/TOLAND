@@ -1,10 +1,12 @@
 num_rounds: 10
-num_clients: 10
+num_clients: 100
 batch_size: 20
 num_classes: 10
 aggregation_rounds: 1
-alpha: 0.5 # control how much iid needed in the dataset, lower the more non-iid.
-iid: 0 #bool value for data distribuitions
+
+# IID-ness
+alpha: 0.1 # control how much iid needed in the dataset, lower the more non-iid.
+iid: 0 #bool
 
 config_fit: # a config that each client will receive
   lr: 0.01 # learning rate to use by the clients
@@ -17,3 +19,5 @@ defaults:
 
 #meta
 plot_colormap: viridis
+metric_path: "baselines/star/results/"
+figure_path: "baselines/star/figures/"

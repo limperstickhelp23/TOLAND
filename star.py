@@ -2,16 +2,13 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pickle import EMPTY_DICT
 from tqdm import tqdm
-
 import numpy as np
 import torch
-
 from client import local_train, test
 from data_prepare import prepare_dataset
 from models import Net
 import colorama
 import json
-
 import hydra
 import omegaconf
 import numpy as np
@@ -19,40 +16,31 @@ import torch
 from hydra.core.hydra_config import HydraConfig
 from hydra.utils import instantiate
 from omegaconf import DictConfig
+from utils import *
 
-
-
-#TODO: Would be nice if I coudl figure out how to make it more modular
-#           without just copy pastign code everywhere
-
+CONFIG_NAME="network"
+WORKERS=7
+#TODO: Would be nice if I could figure out how to make it more modular
+#           without just copy pasting code everywhere
 
 def aggregate_params(model_params):
     averaged_state_dict = {}
-
     for key in model_params[0].keys(): #conv1_
         param_stack = torch.stack([state_dict[key] for state_dict in model_params], dim=0)
         avg_params = torch.mean(param_stack, dim=0)
         averaged_state_dict[key] = avg_params
     return averaged_state_dict
 
-METRIC_PATH="baselines/star/results/"
-FIGPATH="baselines/star/figures/"
-CONFIG_NAME="network"
-
 @hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
 def cloud(cfg:DictConfig):
+    
     omegaconf.OmegaConf.to_yaml(cfg)
-
-    # TODO: add to configs probably
-    METRIC_PATH="baselines/star"
-    WORKERS=5
     DATA={}
     DATA["cloud"]={"losses":[],"accuracies":[]}
 
-    path = f"{METRIC_PATH}/results/run_{len(os.listdir(METRIC_PATH))}/"
-    # os.makedirs(path, exist_ok=True)
-
-    trainloaders, validationloaders, testloader = prepare_dataset(cfg.num_clients, cfg.batch_size)
+    trainloaders, validationloaders, testloader = prepare_dataset(num_partitions=cfg.num_clients, batch_size=cfg.batch_size,iid=cfg.iid,alpha=cfg.alpha)
+    check_iidness(trainloaders[0])
+    print(cfg.iid, cfg.alpha)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     net_model = Net(cfg.num_classes)
@@ -82,17 +70,10 @@ def cloud(cfg:DictConfig):
         DATA["cloud"]["accuracies"].append(g_accuracy)
         print(g_accuracy, " " ,g_loss)
 
-    lgth=len(os.listdir(f"{METRIC_PATH}/results/"))
-    with open(f"{METRIC_PATH}/results/run_{lgth}.json", "w") as file:
+    with open(f"{cfg.metric_path}/run_{len(os.listdir(f"{cfg.metric_path}"))}.json", "w") as file:
         json.dump(DATA, file, indent=4)
-    
     return DATA
 
 
-
-# if __name__ == '__main__':
-#     cloud()
-#     lgth=len(os.listdir(f"{METRIC_PATH}/results/"))
-#     with open(f"{METRIC_PATH}/results/run_{lgth}.json", "w") as file:
-#         json.dump(DATA, file, indent=4)
-
+if __name__ == '__main__':
+    cloud()

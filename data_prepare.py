@@ -43,6 +43,7 @@ def prepare_dataset(num_partitions: int, batch_size: int, val_ratio: float = 0.1
         partition_len[i] += 1
 
     if iid:
+        print("??")
         trainsets = random_split(trainset, partition_len, torch.Generator().manual_seed(2023))
     else:
         trainsets = dirichlet_partition(trainset, partition_len, alpha)

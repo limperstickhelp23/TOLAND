@@ -25,6 +25,11 @@ def get_sampled_colors(n, colormap='viridis'):
     random.shuffle(colors)
     return colors
 
+def get_uniform_colors(n, colormap='viridis'):
+    cmap = cm.get_cmap(colormap, n)
+    colors = [cmap(i / (n - 1)) for i in range(n)]
+    return colors
+
 def sort_dictionary(d,desc=True):
     return sorted(d.items(), key = lambda item: item[1], reverse=desc)
 
@@ -116,7 +121,9 @@ class MobileNet:
         self.GEN=GraphGenerator(num_devices)
         self.threshold = 10
         self.colormap = perceptual_map
-        self.cmap=get_sampled_colors(n=self.N,colormap=perceptual_map) # TODO make even perceptual spacing dynamically at init
+        self.num_colors=self.num_apoints+1
+        print(perceptual_map)
+        self.cmap=get_uniform_colors(n=self.num_colors,colormap=perceptual_map) # TODO make even perceptual spacing dynamically at init
         self.reset_colors()
         """
             TODO: Legacy stuff
@@ -143,10 +150,13 @@ class MobileNet:
 
     def reset_colors(self, ap_color=None):
         # Assign/ populate colors from the ap_member_map and matpltlib color_map
-        self.colors={self.cmap[n]: v for (n,v) in enumerate(self.ap_member_map.values())}
+        self.colors={}
+        for (n,(ap,vals)) in enumerate(sorted(self.ap_member_map.items())):
+            # self.device_list[ap].color=self.cmap[n]
+            self.colors[self.cmap[n]]=vals
         if ap_color is not None:
             self.colors[ap_color]=self.curr_apoints
-
+        
     def init_server(self,pos=[0,0]):
         self.server = Device()
         self.server.x = pos[0]
@@ -413,9 +423,9 @@ class MobileNet:
         return
     
     
-    def plot_communities(self,ax=None, spring=False):
+    def plot_communities(self,ax=None, spring=False,which=2):
 
-        G=self.NXG1
+        G=self.NXG2 if which == 2 else self.NXG1
         pos=self.get_positions()
         
         if (spring==True):
@@ -426,14 +436,14 @@ class MobileNet:
 
         for node_color, nodelist in self.colors.items():
             for node in nodelist:
-                node_size,node_shape=230,'o'
+                node_size,node_shape,fsize,fweight,alpha,fontcolor=180,'o',9,"normal",0.5,"black"
                 if node in self.curr_apoints:
-                    node_size,node_shape=1000,'*'
-                nx.draw_networkx_nodes(G, pos, nodelist=[node], node_color=node_color,node_size=node_size,node_shape=node_shape,ax=ax)
-            labels = {x: x for x in G.nodes}
-            
-        nx.draw_networkx_labels(G, pos, labels, font_size=14,font_weight='bold',font_color='w',ax=ax)
-        nx.draw_networkx_edges(G, pos, edgelist=G.edges(),width=.5, alpha=0.75,ax=ax)
+                    node_size,node_shape,fsize,fweight,alpha,fontcolor=1700,'*',13,"bold",1.0,"white"
+                nx.draw_networkx_nodes(G, pos, nodelist=[node],
+                    node_color=node_color,node_size=node_size,node_shape=node_shape,alpha=alpha,ax=ax)
+                nx.draw_networkx_labels(G, pos, {node:node}, font_size=fsize,font_weight=fweight,font_color=fontcolor,ax=ax)
+            # labels = {x: x for x in G.nodes}
+        nx.draw_networkx_edges(G, pos, edgelist=G.edges(),width=.35, alpha=0.55,ax=ax)
     
     def plot_positions(self):
         pos=self.get_positions()

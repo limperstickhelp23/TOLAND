@@ -34,9 +34,9 @@ def cloud(cfg:DictConfig):
 
     omegaconf.OmegaConf.to_yaml(cfg)
 
+    figpath=f"{cfg.figure_path}/run_{len(os.listdir(cfg.figure_path))}/"
     if (SAVE_RESULTS):
-        os.makedirs(f"{cfg.figure_path}/run_{len(os.listdir(cfg.metric_path))}/", exist_ok=True)
-    
+        os.makedirs(figpath, exist_ok=True)
     DATA={}
     DATA["cloud"]={"losses":[],"accuracies":[]}
 
@@ -44,7 +44,9 @@ def cloud(cfg:DictConfig):
     ap_avg_state_dict,global_state_dict=None,None
 
     net_model = Net(cfg.num_classes)
-    trainloaders, validationloaders, testloader = prepare_dataset(cfg.num_clients, cfg.batch_size, iid=cfg.iid)
+    trainloaders, validationloaders, testloader = prepare_dataset(num_partitions=cfg.num_clients, batch_size=cfg.batch_size,iid=cfg.iid,alpha=cfg.alpha)
+    check_iidness(trainloaders[0])
+    print(cfg.iid, cfg.alpha)
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     
     NETWORK=Baselines(topology="scalefree", num_devices=cfg.num_clients, num_classes=cfg.num_classes,perceptual_map=cfg.plot_colormap)
@@ -56,6 +58,13 @@ def cloud(cfg:DictConfig):
 
         NETWORK.rewire_round()
         DATA[server_round]={}
+
+        # Plot
+        print(NETWORK.colormap)
+        NETWORK.plot_communities(spring=False)
+        plt.title(f"Round {server_round} Communities")
+        plt.savefig(figpath+f"{server_round}.png")
+
     
         print(colorama.Fore.LIGHTBLUE_EX+f'Starting server round {server_round}')
         pool = ThreadPoolExecutor(max_workers=WORKERS)
@@ -70,11 +79,10 @@ def cloud(cfg:DictConfig):
         pool.shutdown(wait=True)
         
         aggr_round=0
-       
+
         # Locally Pass to AP's
         NETWORK.map_results(results)
         ap_avg_state_dict = NETWORK.local_aggregation_round()
-        print(ap_avg_state_dict.keys())
         DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, Net(cfg.num_classes), validationloaders, device)
         net_state_dict = aggregate_params(list(ap_avg_state_dict.values()))
 
@@ -83,6 +91,8 @@ def cloud(cfg:DictConfig):
         g_loss, g_accuracy = test(net_model, testloader, device)
         DATA["cloud"]["losses"].append(g_loss)
         DATA["cloud"]["accuracies"].append(g_accuracy)
+        print("loss: ", g_loss, "accuracy: ", g_accuracy)
+
 
     if (SAVE_RESULTS):
         lgth=len(os.listdir(f"{cfg.metric_path}/"))

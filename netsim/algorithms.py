@@ -29,7 +29,7 @@ class Algorithm(MobileNet):
     """
     
     def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo"):
-        super().__init__(num_devices=num_devices,num_classes=10,perceptual_map="rainbow")
+        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map)
         self.ap_param_stacks={}
         self.sf_seeds=max(2,int((.10)*num_devices))
     
@@ -175,7 +175,8 @@ class CosineReassignment(Algorithm):
     def rewire_round(self,round_num=0):
         self.build_proximity_graph()
         self.set_custom_topology(self.A)
-        self.plot_topology()
+        self.make_derived_network()
+        # self.plot_topology()
     
     #TODO: figure out how to connect results back to local aggregation algorithm
     def ap_aggregate(self):

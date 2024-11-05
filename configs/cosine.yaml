@@ -1,9 +1,9 @@
-num_rounds: 2
-num_clients: 15
+num_rounds: 10
+num_clients: 100
 batch_size: 20
 num_classes: 10
 aggregation_rounds: 1
-alpha: 0.5 # control how much iid needed in the dataset, lower the more non-iid.
+alpha: 0.1 # control how much iid needed in the dataset, lower the more non-iid.
 iid: 0 #bool value for data distribuitions
 
 config_fit: # a config that each client will receive
@@ -15,4 +15,8 @@ defaults:
   - model: net
   - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
 
-plot_colormap: viridis 
+
+plot_colormap: nipy_spectral 
+save_results: true
+metric_path: "cosine_assignment/results"
+figure_path: "cosine_assignment/figures"

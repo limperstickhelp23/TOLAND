@@ -50,5 +50,5 @@ def test(model, testloader, device):
             loss += criterion(outputs, labels).item()
             _, predicted = torch.max(outputs.data, 1)
             correct += (predicted == labels).sum().item()
-    accuracy = correct / len(testloader.dataset)
+    accuracy = correct / len(testloader.dataset) if (len(testloader.dataset) > 0) else 0.0
     return loss, accuracy
