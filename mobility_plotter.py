@@ -82,7 +82,7 @@ def plot_all_hours(logs):
     # plt.axhline(0, color='black', lw=0.5, ls='--')  # Optional: horizontal line at y=0
     # plt.axvline(0, color='black', lw=0.5, ls='--')  # Optional: vertical line at x=0
     
-    for (n,datehour) in enumerate(pd.date_range(start=start_date, end=end_date,freq="H").tolist()):
+    for (n,datehour) in enumerate(pd.date_range(start=start_date, end=end_date,freq="=h").tolist()):
         if datehour.hour < START_HOUR or  (datehour.hour > STOP_HOUR):
             continue
         scatters,labels=plot_hour(datehour,logs,ax)
@@ -102,7 +102,7 @@ def plot_all_hours(logs):
 if __name__ == "__main__":
     logs={}
     for n in range(100):
-        df=pd.read_pickle(f"device_movements/log_{n}.pkl")
+        df=pd.read_pickle(f"devices/movements/log_{n}.pkl")
         try:
             logs[n]=df[(df.index.hour >= START_HOUR) & (df.index.hour <= STOP_HOUR)]
         except:

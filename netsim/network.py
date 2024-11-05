@@ -14,6 +14,7 @@ from typing import List
 from pathlib import Path
 import os
 
+
 # NOTE: manual color map | use built-ins from matplotlib
 COLORS=[
     "red","blue","gold","green","lavender","magenta","orange","grey","firebrick","brown","tab:blue","darkgreen","indigo"
@@ -63,7 +64,7 @@ class Device:
         self.project_root=Path(__file__).resolve().parent.parent
         self.model_root=os.path.join(os.path.join(self.project_root,"devices"),"models")
         self.model_path=f"{self.model_root}/{id}.pth"
-        self.commmunity_model_path=f"{self.model_root}/{self.parent_point}.pth"
+        self.community_model_path=f"{self.model_root}/{self.parent_point}.pth"
         self.coordinate_path=f"{self.project_root}/devices/movements/log_{self.id}.pkl"
 
         # Legacy Stuff

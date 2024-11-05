@@ -19,8 +19,10 @@ from hydra.core.hydra_config import HydraConfig
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
+import warnings # Suppress all warnings # NOTE: some complaints from torch and plotting stuff
+warnings.filterwarnings("ignore") 
 
-#SETTINGS
+#NOTE SETTINGS / Set algorithm here
 CONFIG_NAME="scalefree"  # "scalefree", "network", "star", "cosine"
 SAVE_RESULTS=True
 WORKERS=10
@@ -44,13 +46,12 @@ def cloud(cfg:DictConfig):
     check_iidness(trainloaders[0]),print(cfg.iid, cfg.alpha)
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     
-
     ###NOTE Select Algorithm
     if cfg.algorithm == "scalefree":
-        NETWORK=ScaleFreeRewiring(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD)
+        NETWORK=ScaleFreeRewiring(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     
     elif cfg.algorithm == "cosine":
-        NETWORK=CosineReassignment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD)
+        NETWORK=CosineReassignment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     
     else:
         NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD) # Some Default Behavior
@@ -103,7 +104,7 @@ def cloud(cfg:DictConfig):
         with open(f"{metpath}/run_{lgth}_{SUFFIX}.json", "w") as file:
             json.dump(DATA, file, indent=4)
         
-        print(f"Done. Metrics saved to {metpath}/run_{lgth}.json")
+        print(f"Done.\nMetrics saved to {metpath}/run_{lgth}.json")
         print(f"Plots saved to {figpath}/")
 
 

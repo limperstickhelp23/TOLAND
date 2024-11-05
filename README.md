@@ -2,6 +2,13 @@
 Adaptive Topology structures for Federated Learning
 
 
+## Test Scripts
+- Can Run "cloud_template.py" -- set different algorithm configs to test the full pipeline
+- Can Run "mobility_plotter.py" to playback device movements ( austin map is still WIP)
+
+- NOTE: see screenshot -- still an error on cosine algorithm, round 1 worked fine but round 2 failed with DataLoader worker (pid(s) 12943) exited unexpectedly. This only happened today in the new strucutre with file lookups
+
+
 ## Changes:
 
 ### *NetSim Folder*
@@ -35,10 +42,6 @@ For example "reset_colors()" is purely for visualizing
 
 ### Results Folder:
 - Structure changed -- check to see the difference
-
-### "Plotter" Function
-- Can Ignore
-- Can Run "mobility_plotter.py" to playback device movements ( austin map is still WIP)
 
 
 ### Device Movements
