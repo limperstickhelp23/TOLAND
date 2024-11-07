@@ -3,6 +3,8 @@ import os,random
 import numpy as np
 import networkx as nx
 import torch.nn as nn
+import random
+import copy
 
 #NOTE: Some UTILS
 def compute_cosim_metric(m1: nn.Parameter, m2: nn.Parameter):
@@ -52,6 +54,7 @@ class Algorithm(Network):
         super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map,threshold=threshold)
         self.ap_param_stacks={}
         self.sf_seeds=max(2,int((.10)*num_devices))
+        self.update_coordinates(0)
     
     def run_global_round_setup_steps(self,round=0):
         print("Implement in child classes")
@@ -106,7 +109,7 @@ class Algorithm(Network):
             self.ap_member_map[d.parent_point].append(d.id)
             # self.ap_param_stacks[d.parent_point].append(d.model.state_dict()) #NOTE: DEPRECATE not needed anymore
         
-        self.reset_colors() # NOTE: whoops forgot this before
+        # self.reset_colors() # NOTE: whoops forgot this before
 
 #BASELINE
 class Baselines(Algorithm):
@@ -143,6 +146,7 @@ class Baselines(Algorithm):
         self.make_derived_network()
         self.assign_communities()
 
+
 #ALGORITHMS
 class LocalizedPreferentialAttachment(Algorithm):
     """ TODO:
@@ -154,9 +158,112 @@ class LocalizedPreferentialAttachment(Algorithm):
         This could be used as a first step and cosine reassignemnt could be used as a second. Or it could do well on its own. 
         Compare IID and Non-IID cases.
     """
-    def __init__():
-        ##TODO
+    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo",threshold=10):
+        super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map,threshold=threshold)
+        ratio=.07
+        self.sf_seeds=max(int(ratio*num_devices),2)
         return
+
+
+    def run_global_round_setup_steps(self, round=0):
+        
+        self.update_coordinates(round)
+        self.run_linking_algorithm(round_num=round)
+        return 
+
+    def run_local_aggregation_round(self,max_iterations=3): 
+        return super().run_local_aggregation_round()
+
+
+    def run_linking_algorithm(self,round_num=0,folder="static_updates/",save=False,weight="weight"):
+        """ Cases:
+                - Static Devices/Static Topology
+                - Static Device/Changing Topology
+                - Mobile Devices/Changing Topology
+        """
+        self.run_proximity_preferential_attachment()
+        self.NXG1=copy.deepcopy(self.NXG2)
+        self.select_access_points_on_betweenness()
+        self.assign_communities()
+   
+
+    def run_proximity_preferential_attachment(self,threshold=.33,num_seeds=5,num_rounds=5,oporder=1):
+        # G1 is a placeholder with which to build G2
+        # G2 is initialized either with some seed nodes or minspantree
+        self.NXG2=self.init_with_minspantree()
+        self.build_proximity_graph(threshold)
+        G=self.NXG1
+        G2=self.NXG2 #NOTE/TODO -- maybe start with a min span Tree here or use the seeding method 
+        
+        shuffler=copy.deepcopy(self.device_list)
+
+        ## NOTE: Ordering 1:  Device THEN Degree
+        if oporder == 1:
+            random.shuffle(shuffler)
+            for d in shuffler:
+                # print(f"\nnext device {d.id}\n")
+                neighbors=list(G.neighbors(d.id))
+                if len(neighbors)==0:
+                    continue
+                degrees=[G2.degree(nid) for nid in neighbors]
+                probas=degrees/np.sum(degrees)
+               
+                for attach in set(random.choices(neighbors, weights=probas, k=num_rounds)):
+                    self.NXG2.add_edge(
+                        d.id,attach, weight=self.Euclidean(self.device_list[d.id],self.device_list[attach] )
+                    )
+            # print(probas)
+
+        ## NOTE: Ordering 2 is Opposite --   Operations can Actually Lead to Different Distributions
+        if oporder == 2:
+            for _ in range(num_rounds):
+                print(_,"\n")
+                for d in self.device_list:
+                    print(f"\nnext device {d.id}\n")
+                    neighbors=list(G.neighbors(d.id))
+                    if len(neighbors)==0:
+                        print(f"skipped: {d.id}")
+                        continue
+                    degrees=[ max(G2.degree(nid)-1,1) for nid in neighbors]
+                    # print(degrees)
+                    probas=degrees/np.sum(degrees)
+                    attach = random.choices(neighbors, weights=probas, k=1)[0]
+                    # print(attach, " ", probas)
+                    self.NXG2.add_edge(
+                        d.id,attach, weight=self.Euclidean(self.device_list[d.id],self.device_list[attach] )
+                    )
+   
+        # self.plot_topology(top=1)
+        # plt.show()
+        # self.plot_topology(top=2)
+        # plt.show()
+        
+    def init_with_minspantree(self):
+        A=np.ones([self.N,self.N])
+        np.fill_diagonal(A, 0)
+        temp=nx.from_numpy_array(A)
+        temp=self.populate_edge_weights(temp)
+        return nx.minimum_spanning_tree(
+            temp,weight="weight",algorithm="kruskal")
+
+
+    def seeding_algorithm(self,num_seeds=5):
+        # TODO: run seeding out of the other file without need for copying code
+        self.reset()
+        nodes=set([i for i in range(self.N)])
+        seeds,sampler = [],[]
+        
+        # seed
+        for _ in range(num_seeds):
+            seed=random.sample(list(nodes),k=1)[0]
+            nodes.remove(seed)
+            seeds.append(seed)
+        
+        # randomly connect
+        for _ in range(np.random.randint(12,24)): # num pulls=np.random.randint(12,24)
+            (i,j)=random.sample(seeds,k=2)
+            self.add_edge(i,j),sampler.append(i),sampler.append(j)
+
 
 class ScaleFreeRewiring(Algorithm): 
     """ The Difference here from the baseline is that each round is a new scale-free topology. 

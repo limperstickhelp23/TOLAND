@@ -1,8 +1,8 @@
-algorithm: scalefree
+algorithm: prox_preferential
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
-metric_path: "results/baselines/scalefree/metrics"
-figure_path: "results/baselines/scalefree/figures"
+metric_path: "results/proxpref/metrics"
+figure_path: "results/proxpref/figures"
 
 
 num_rounds: 4
@@ -12,8 +12,8 @@ num_classes: 10
 aggregation_rounds: 1
 
 
-alpha: 0.1  # control how much iid needed in the dataset, lower the more non-iid. #NOTE: edeg case occurs when alpha is too small
-iid: 1      #bool value for data distribuitions
+alpha: 0.1 # control how much iid needed in the dataset, lower the more non-iid. #NOTE: edeg case occurs when alpha is too small
+iid: 1 #bool value for data distribuitions
 
 config_fit: # a config that each client will receive
   lr: 0.01 # learning rate to use by the clients

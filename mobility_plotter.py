@@ -53,7 +53,7 @@ def plot_all_hours(logs):
     # plt.axhline(0, color='black', lw=0.5, ls='--')  # Optional: horizontal line at y=0
     # plt.axvline(0, color='black', lw=0.5, ls='--')  # Optional: vertical line at x=0
     
-    for (n,datehour) in enumerate(pd.date_range(start=start_date, end=end_date,freq="=h").tolist()):
+    for (n,datehour) in enumerate(pd.date_range(start=start_date, end=end_date,freq="h").tolist()):
         if datehour.hour < START_HOUR or  (datehour.hour > STOP_HOUR):
             continue
         scatters,labels=plot_hour(datehour,logs,ax)
@@ -64,6 +64,11 @@ def plot_all_hours(logs):
 
         if n>200: 
             break
+
+def animate_nx_community_plots():
+    return
+
+
 
 ## NOTE:
 # Based on the Folium Pictures -- this data is all the way in like separate cities -- Austin isn't relaly beyond latittdue 30.3
@@ -81,6 +86,11 @@ if __name__ == "__main__":
             continue
 
     plot_all_hours(logs)
+
+
+
+
+
 
 
 

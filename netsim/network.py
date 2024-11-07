@@ -14,10 +14,9 @@ from typing import List
 from pathlib import Path
 import os
 
-
 # NOTE: manual color map | use built-ins from matplotlib
 COLORS=[
-    "red","blue","gold","green","lavender","magenta","orange","grey","firebrick","brown","tab:blue","darkgreen","indigo"
+    "red","blue","gold","green","lavender","magenta","orange","grey","firebrick","brown","tab:blue","darkgreen","indigo",
     "black", "teal", "bisque", "mediumturquoise", "darkviolet"
 ]
 ROOT=Path(__file__).resolve().parent.parent
@@ -76,7 +75,6 @@ class Device:
         # self.model=Net(num_classes)
         # self.community_model=Net(num_classes)  #NOTE: really these are community parameters, after a global round they are the global params
 
-    
     def assign_parent(self,apid):
         self.parent_point=apid
         self.commmunity_model_path=f"{self.model_root}/{self.parent_point}.pth"
@@ -93,6 +91,7 @@ class Device:
     
     def set_step_coordinates(self,step=0):
         #NOTE: update positions at every GLOBAL round
+        print(step)
         row=pd.read_pickle(self.coordinate_path).iloc[step]
         self.x,self.y=row['geolat'],row['geolong']
         return
@@ -168,7 +167,14 @@ class Network:
         self.colors={}
         for (n,(ap,vals)) in enumerate(sorted(self.ap_member_map.items())):
             # self.device_list[ap].color=self.cmap[n]
-            self.colors[self.cmap[n]]=vals
+            print("num apoints: ", n)
+            print("num colors: ", len(self.cmap))
+            if len(self.cmap) > n:
+                print("n ", n, "length ", len(self.cmap))
+                self.colors[self.cmap[n]]=vals
+            else:
+                ii=n-len(self.cmap)
+                self.colors[COLORS[ii]] = vals # extra colors for loners
         if ap_color is not None:
             self.colors[ap_color]=self.curr_apoints
         
@@ -178,12 +184,21 @@ class Network:
         self.server.y = pos[1]
         return
     
+    ##TODO: Fix this Redundancy
+    def populate_edge_weights(self,G):
+        for (k,vals) in nx.to_dict_of_lists(G).items():
+            for v in vals:
+                G.add_edge(
+                    k,v,weight=self.Euclidean(self.device_list[k], self.device_list[v])
+                )
+        return G
+
     ## NOTE: Creating Baseline Topologies (TODO: possibly move these to a Diffferent Level)
     def set_er_topology(self, p=.05,num_edges=100,allow_isolates=False):
         self.reset_topologies()
         self.GEN.erdos_renyi(p,num_edges,allow_isolates)
-        self.NXG1=nx.from_numpy_array(self.GEN.A)
-        self.populate_edge_weights()
+        G=nx.from_numpy_array(self.GEN.A)
+        self.NXG1=self.populate_edge_weights(G)
     
     def set_star_topology(self):
         self.GEN.A = np.zeros([self.N+1,self.N+1])
@@ -192,20 +207,23 @@ class Network:
     def set_sw_topology(self, p=.005,k=2):
         self.reset_topologies()
         self.GEN.watts_strogatz(p,k)
-        self.NXG1=nx.from_numpy_array(self.GEN.A)
-        self.populate_edge_weights()
+        G=nx.from_numpy_array(self.GEN.A)
+        self.NXG1=self.populate_edge_weights(G)
     
     def set_sf_topology(self,num_seeds=5):
         self.reset_topologies()
         self.GEN.scale_free(num_seeds)
-        self.NXG1=nx.from_numpy_array(self.GEN.A)
-        self.populate_edge_weights()
+        G=nx.from_numpy_array(self.GEN.A)
+        self.NXG1=self.populate_edge_weights(G)
 
-    def set_custom_topology(self, A: np.ndarray):
-        self.reset_topologies()
+    def set_custom_topology(self, A: np.ndarray,which=1):
+        """NOTE: I don't like this function. Mark to delete
+        
+        """
+        # self.reset_topologies()
         self.A=A
-        self.NXG1=nx.from_numpy_array(A)
-        self.populate_edge_weights()
+        G=nx.from_numpy_array(A)
+        self.NXG1=self.populate_edge_weights(G)
 
     def build_proximity_graph(self,threshold=10):
         self.A=np.zeros([self.N,self.N])
@@ -214,16 +232,8 @@ class Network:
             for j in range(i):
                 if self.Euclidean(self.device_list[i],self.device_list[j]) < self.threshold:
                     self.A[i,j]=self.A[j,i]=1
-        self.set_custom_topology(self.A)
-        return
-    
-    def populate_edge_weights(self):  
-        for (k,vals) in nx.to_dict_of_lists(self.NXG1).items():
-            for v in vals:
-                self.NXG1.add_edge(
-                    k,v,weight=self.Euclidean(self.device_list[k], self.device_list[v])
-                )
-        # self.calculate_topology_cost() #TODO
+        self.NXG1=self.populate_edge_weights(G=nx.from_numpy_array(self.A))
+        # print(self.NXG1.edges())
         return
                 
     def attribute_communities(self, memberships: dict=None):
@@ -385,6 +395,13 @@ class Network:
             self.ap_params[AP] = aggregate_params(chosen_params)
 
         return ap_params
+    
+    def set_topology_to_plot(self,which=1):
+        if which == 1:
+            return (self.NXG1,{"blue":self.NXG1.nodes()})
+        if which == 2:
+            return (self.NXG2,{"teal":self.NXG2.nodes()})
+
     
     #NOTE: Plotting Methods
     def plot_topology(self,top=1,edge_weights=False):

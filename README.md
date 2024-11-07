@@ -10,6 +10,22 @@ ERROR (WIP)
 - NOTE: see screenshot -- still an error on cosine algorithm, round 1 worked fine but round 2 failed with DataLoader worker (pid(s) 12943) exited unexpectedly. This only happened today in the new strucutre with file lookups
 ![worker failed](cosine_algorithm_error.png)
 
+## Plot Training Curve
+run: 
+    `python results/plotter.py path_to_results_file.json`
+
+Some Sample Results So Far (with MNIST)
+- Mobility + Preferential ScaleFree
+    `python results/plotter.py results/baselines/scalefree/metrics/adaptive_mnist_iid.json`
+- Mobility + Static ScaleFree
+
+
+- No Mobility + ScaleFree
+    `python results/plotter.py results/baselines/scalefree/metrics/adaptive_mnist_iid.json`
+- No Mobility + Cosine Sim
+    `python results/plotter.py results/proxpref/metrics/iid/run_0__TEST.json`
+
+
 
 ## Changes:
 

@@ -29,6 +29,10 @@ WORKERS=10
 THRESHOLD=10 # parameter on how far away devices can talk to each other
 SUFFIX="_TEST"
 
+
+
+
+
 @hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
 def cloud(cfg:DictConfig):
     
@@ -53,12 +57,15 @@ def cloud(cfg:DictConfig):
     elif cfg.algorithm == "cosine":
         NETWORK=CosineReassignment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     
+    elif cfg.algorithm == "prox_preferential":
+        NETWORK=LocalizedPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
+        print("hre")
+    
     else:
         NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD) # Some Default Behavior
     
     # elif cfg.algorothm == "star":
     #     NETWORK=StarBaseline(TODO)
-
 
     ###NOTE: Run
     for server_round in range(cfg.num_rounds):
