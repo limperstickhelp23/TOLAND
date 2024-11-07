@@ -17,7 +17,8 @@ run:
 Some Sample Results So Far (with MNIST)
 - Mobility + Preferential ScaleFree
     `python results/plotter.py results/baselines/scalefree/metrics/adaptive_mnist_iid.json`
-- Mobility + Static ScaleFree
+- Mobility + Rewire ScaleFree
+    `python results/plotter.py results/baselines/scalefree/metrics/iid/run_0__TEST.json`
 
 
 - No Mobility + ScaleFree

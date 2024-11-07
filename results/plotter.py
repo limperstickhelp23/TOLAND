@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     with open(get_file_path(), "r") as file:
         data = json.load(file)
-    
+    print(data)
     training_curves(data)
     #results/baselines/scalefree/metrics/adaptive_mnist_iid.json
 
