@@ -1,5 +1,12 @@
-torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
-flwr~=1.11.1
+# PyTorch nightly CPU version with custom index URL
+torch --index-url https://download.pytorch.org/whl/nightly/cpu
+torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+
+# Hydra core 
 hydra-core~=1.3.2
-torch~=2.6.0.dev20241005
-numpy~=1.26.4
+
+# Omegaconf and tqdm without specific versions
+numpy
+omegaconf
+tqdm

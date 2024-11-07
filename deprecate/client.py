@@ -2,7 +2,6 @@ import torch
 
 from omegaconf import DictConfig
 
-
 def local_train(cid, model, trainloader, valloder, parameters, cfg:DictConfig, device):
     epochs = cfg["epochs"]
     lr = cfg["lr"]

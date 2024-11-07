@@ -40,7 +40,7 @@ def aggregate_params(model_params):
 
 @hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
 def cloud(cfg:DictConfig):
-    
+
     omegaconf.OmegaConf.to_yaml(cfg)
     DATA={}
     DATA["cloud"]={"losses":[],"accuracies":[]}
@@ -53,7 +53,7 @@ def cloud(cfg:DictConfig):
     net_model = Net(cfg.num_classes)
 
     for server_round in range(cfg.num_rounds):
-        
+
         print(colorama.Fore.LIGHTBLUE_EX+f'Starting server round {server_round}')
         pool = ThreadPoolExecutor(max_workers=WORKERS)
         results = []
@@ -65,12 +65,14 @@ def cloud(cfg:DictConfig):
         pool.shutdown(wait=True)
 
         params = [result[1] for result in results]
-        #NOTE: testing is this what makes diffference ? 
+        #NOTE: testing is this what makes diffference ?
         # if server_round != 0:
         #     params.append(net_model.state_dict())
 
         net_state_dict = aggregate_params(params)
+
         net_model.load_state_dict(net_state_dict)
+
         g_loss, g_accuracy = test(net_model, testloader, device)
 
         DATA["cloud"]["losses"].append(g_loss)
