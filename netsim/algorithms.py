@@ -148,7 +148,7 @@ class Baselines(Algorithm):
 
 
 #ALGORITHMS
-class LocalizedPreferentialAttachment(Algorithm):
+class ProximityPreferentialAttachment(Algorithm):
     """ TODO:
         Set Hubs Based on Preferential Attachment mechanism but where it is also based on location at every round. 
         
@@ -211,7 +211,7 @@ class LocalizedPreferentialAttachment(Algorithm):
                 for attach in set(random.choices(neighbors, weights=probas, k=num_rounds)):
                     self.NXG2.add_edge(
                         d.id,attach, weight=self.Euclidean(self.device_list[d.id],self.device_list[attach] )
-                    )
+                )
             # print(probas)
 
         ## NOTE: Ordering 2 is Opposite --   Operations can Actually Lead to Different Distributions

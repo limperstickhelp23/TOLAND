@@ -19,18 +19,16 @@ from hydra.core.hydra_config import HydraConfig
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
+
 import warnings # Suppress all warnings # NOTE: some complaints from torch and plotting stuff
 warnings.filterwarnings("ignore") 
 
 #NOTE SETTINGS / Set algorithm here
 CONFIG_NAME="scalefree"  # "scalefree", "network", "star", "cosine"
-SAVE_RESULTS=True
+SAVE_RESULTS=False
 WORKERS=10
-THRESHOLD=10 # parameter on how far away devices can talk to each other
+THRESHOLD=10 # NOTE: does nothing -- threshold parameter is set at algorithm level
 SUFFIX="_TEST"
-
-
-
 
 
 @hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
@@ -58,7 +56,7 @@ def cloud(cfg:DictConfig):
         NETWORK=CosineReassignment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     
     elif cfg.algorithm == "prox_preferential":
-        NETWORK=LocalizedPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
+        NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
         print("hre")
     
     else:
@@ -117,3 +115,16 @@ def cloud(cfg:DictConfig):
 
 if __name__ == "__main__":
     cloud()
+
+
+
+# parser = argparse.ArgumentParser(description="Run a script with a specified config file.")
+# parser.add_argument(
+#     'casename', 
+#     type=str, 
+#     # required=True, 
+#     help="Path to the configuration file."
+# )
+# args = parser.parse_args()
+# print(f"Running config: {args.casename}")
+# CONFIG_NAME = args.casename
