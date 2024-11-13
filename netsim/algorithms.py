@@ -55,7 +55,7 @@ class Algorithm(Network):
         self.ap_param_stacks={}
         self.sf_seeds=max(2,int((.10)*num_devices))
         self.update_coordinates(0)
-    
+
     def run_global_round_setup_steps(self,round=0):
         print("Implement in child classes")
         
@@ -166,12 +166,12 @@ class ProximityPreferentialAttachment(Algorithm):
 
 
     def run_global_round_setup_steps(self, round=0):
-        
+
         self.update_coordinates(round)
         self.run_linking_algorithm(round_num=round)
-        return 
+        return
 
-    def run_local_aggregation_round(self,max_iterations=3): 
+    def run_local_aggregation_round(self,max_iterations=3):
         return super().run_local_aggregation_round()
 
 
@@ -185,7 +185,7 @@ class ProximityPreferentialAttachment(Algorithm):
         self.NXG1=copy.deepcopy(self.NXG2)
         self.select_access_points_on_betweenness()
         self.assign_communities()
-   
+
 
     def run_proximity_preferential_attachment(self,threshold=.33,num_seeds=5,num_rounds=5,oporder=1):
         # G1 is a placeholder with which to build G2
@@ -193,8 +193,8 @@ class ProximityPreferentialAttachment(Algorithm):
         self.NXG2=self.init_with_minspantree()
         self.build_proximity_graph(threshold)
         G=self.NXG1
-        G2=self.NXG2 #NOTE/TODO -- maybe start with a min span Tree here or use the seeding method 
-        
+        G2=self.NXG2 #NOTE/TODO -- maybe start with a min span Tree here or use the seeding method
+
         shuffler=copy.deepcopy(self.device_list)
 
         ## NOTE: Ordering 1:  Device THEN Degree
@@ -207,7 +207,7 @@ class ProximityPreferentialAttachment(Algorithm):
                     continue
                 degrees=[G2.degree(nid) for nid in neighbors]
                 probas=degrees/np.sum(degrees)
-               
+
                 for attach in set(random.choices(neighbors, weights=probas, k=num_rounds)):
                     self.NXG2.add_edge(
                         d.id,attach, weight=self.Euclidean(self.device_list[d.id],self.device_list[attach] )
@@ -232,12 +232,12 @@ class ProximityPreferentialAttachment(Algorithm):
                     self.NXG2.add_edge(
                         d.id,attach, weight=self.Euclidean(self.device_list[d.id],self.device_list[attach] )
                     )
-   
+
         # self.plot_topology(top=1)
         # plt.show()
         # self.plot_topology(top=2)
         # plt.show()
-        
+
     def init_with_minspantree(self):
         A=np.ones([self.N,self.N])
         np.fill_diagonal(A, 0)
@@ -252,20 +252,20 @@ class ProximityPreferentialAttachment(Algorithm):
         self.reset()
         nodes=set([i for i in range(self.N)])
         seeds,sampler = [],[]
-        
+
         # seed
         for _ in range(num_seeds):
             seed=random.sample(list(nodes),k=1)[0]
             nodes.remove(seed)
             seeds.append(seed)
-        
+
         # randomly connect
         for _ in range(np.random.randint(12,24)): # num pulls=np.random.randint(12,24)
             (i,j)=random.sample(seeds,k=2)
             self.add_edge(i,j),sampler.append(i),sampler.append(j)
 
 
-class ScaleFreeRewiring(Algorithm): 
+class ScaleFreeRewiring(Algorithm):
     """ The Difference here from the baseline is that each round is a new scale-free topology. 
     Comparable to Star ? What about if we re-use the same ScaleFree Topology ?
     """

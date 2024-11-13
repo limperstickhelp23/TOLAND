@@ -30,7 +30,6 @@ WORKERS=10
 THRESHOLD=10 # NOTE: does nothing -- threshold parameter is set at algorithm level
 SUFFIX="_TEST"
 
-
 @hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
 def cloud(cfg:DictConfig):
     
@@ -58,7 +57,7 @@ def cloud(cfg:DictConfig):
     elif cfg.algorithm == "prox_preferential":
         NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
         print("hre")
-    
+
     else:
         NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD) # Some Default Behavior
     
@@ -120,9 +119,9 @@ if __name__ == "__main__":
 
 # parser = argparse.ArgumentParser(description="Run a script with a specified config file.")
 # parser.add_argument(
-#     'casename', 
-#     type=str, 
-#     # required=True, 
+#     'casename',
+#     type=str,
+#     # required=True,
 #     help="Path to the configuration file."
 # )
 # args = parser.parse_args()

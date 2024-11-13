@@ -1,26 +1,15 @@
-from netsim.network import MobileNet
-from netsim.algorithms import *
-from deprecate.data_prepare import *
-from utils import *
-
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pickle import EMPTY_DICT
 
-from tqdm import tqdm
-
+import colorama
 import hydra
 import omegaconf
-import numpy as np
-import torch
-from hydra.core.hydra_config import HydraConfig
-from hydra.utils import instantiate
-from omegaconf import DictConfig
+from tqdm import tqdm
 
-from deprecate.client import local_train, test
+from deprecate.client import local_train
 from deprecate.data_prepare import prepare_dataset
 from deprecate.models import Net
-import colorama
+from netsim.algorithms import *
+from utils import *
 
 #SETTINGS
 CONFIG_NAME="cosine"
@@ -34,7 +23,7 @@ def cloud(cfg:DictConfig):
     iid="iid" if cfg.iid else "non_iid"
     
     metpath=f"{cfg.metric_path}/{iid}"
-    figpath=f"{cfg.figure_path}/{iid}/"+f"run_{len(os.listdir(f"{cfg.figure_path}/{iid}/"))}"
+    figpath=f"{cfg.figure_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.figure_path}/{iid}/'))}"
 
     # save_path = HydraConfig.get().runtime.output_dir  # NOTE: or put paths in config files
     trainloaders, validationloaders, testloader = prepare_dataset(cfg.num_clients, cfg.batch_size, iid=cfg.iid, alpha=cfg.alpha)
@@ -88,7 +77,7 @@ def cloud(cfg:DictConfig):
         print("loss: ", g_loss, "accuracy: ", g_accuracy)
 
     if (SAVE_RESULTS):
-        with open(f"{metpath}/run_{len(os.listdir(f"{metpath}/"))}.json", "w") as file:
+        with open(f"{metpath}/run_{len(os.listdir(f'{metpath}/'))}.json", "w") as file:
             json.dump(DATA, file, indent=4)
 
 
