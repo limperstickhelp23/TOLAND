@@ -7,15 +7,16 @@ import torch
 from torch.utils.data import DataLoader, random_split, Subset
 from torchvision.datasets import MNIST, CIFAR10
 from torchvision.transforms import Compose, Normalize, ToTensor
+from omegaconf import DictConfig
 
 
 def get_mnist(data_path: str = "~/TOLAND/data"):
     """Download MNIST and apply minimal transformation."""
+    data_path = os.path.expanduser(data_path)
 
     tr = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
-    bool_ = False
-    if not os.path.exists(os.path.join(data_path, "MNIST")):
-        bool_ = True
+
+    bool_ = not os.path.exists(os.path.join(data_path, 'MNIST', 'processed', 'training.pt'))
 
     trainset = MNIST(data_path, train=True, download=bool_, transform=tr)
     testset = MNIST(data_path, train=False, download=bool_, transform=tr)
@@ -23,12 +24,10 @@ def get_mnist(data_path: str = "~/TOLAND/data"):
     return trainset, testset
 
 def get_cifar10(data_path: str = "~/TOLAND/data"):
-
+    data_path = os.path.expanduser(data_path)
     tr = Compose([ToTensor(), Normalize(0.1307, 0.3081)])
-    bool_ = False
-    print(data_path)
-    if not os.path.exists(os.path.join(data_path, "CIFAR10")):
-        bool_ = True
+
+    bool_ = not os.path.exists(os.path.join(data_path, 'CIFAR10'))
 
     trainset = CIFAR10(data_path, train=True, download=bool_, transform=tr)
     testset = CIFAR10(data_path, train=False, download=bool_, transform=tr)
@@ -36,9 +35,13 @@ def get_cifar10(data_path: str = "~/TOLAND/data"):
     return trainset, testset
 
 
-def prepare_dataset(Dataset: str, num_partitions: int, batch_size: int, val_ratio: float = 0.1, iid: bool = True, alpha=0.5):
+def prepare_dataset(cfg : DictConfig, val_ratio: float = 0.1):
     """Prepare data loaders for each client and choose to non-iid or iid datasets"""
-
+    Dataset = cfg.dataset
+    num_partitions = cfg.num_partitions
+    batch_size = cfg.batch_size
+    iid = cfg.iid
+    alpha = cfg.alpha
     # download MNIST in case it's not already in the system
     if Dataset == "MNIST":
         trainset, testset = get_mnist()

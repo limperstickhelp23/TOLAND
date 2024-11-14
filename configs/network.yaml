@@ -1,25 +1,33 @@
-algorithm: star 
-#result metadata
-plot_colormap: nipy_spectral
-metric_path: "results/baselines/star/metrics"
-figure_path: "results/baselines/star/figures"
+algorithm: 'DPP' # scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
+plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
+save_results: True
+metric_path: "results/{algorithm}/metrics"
+figure_path: "results/{algorithm}/figures"
 
-num_rounds: 2
-num_clients: 10
-batch_size: 20
+
+num_rounds: 3
 num_classes: 10
-aggregation_rounds: 1
+input_len: 1 # CIFAR: 3  MNIST: 1
+num_clients: 10
+aggregation_rounds: 2 # defaults to 1 if algorithm is 'star'
 
-# IID-ness
-alpha: 0.1 # control how much iid needed in the dataset, lower the more non-iid.
-iid: 0 #bool
+#####################
+# DATA PREPARE AND IID-ness
+config_data:
+  dataset: 'MNIST' # **Change input_len** 'MNIST', 'CIFAR-10'
+  alpha: 0.1 # control how much iid needed in the dataset, lower the more non-iid.
+  batch_size: 20
+  num_partitions: null #Gets the same value as num_clients (do not change)
+  iid: 0 # bool 0:iid  1:non-iid
 
+###################
+# DEVICE PARAMETERS
 config_fit: # a config that each client will receive
   lr: 0.01 # learning rate to use by the clients
   momentum: 0.9 # momentum used by SGD optimiser on the client side
   epochs: 2 # number of training epochs each clients does in a fit() round
 
+
 defaults:
-  - model: net
   - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
 

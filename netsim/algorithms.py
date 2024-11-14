@@ -5,6 +5,7 @@ import networkx as nx
 import torch.nn as nn
 import random
 import copy
+from tqdm import tqdm
 
 #NOTE: Some UTILS
 def compute_cosim_metric(m1: nn.Parameter, m2: nn.Parameter):
@@ -27,15 +28,34 @@ def compute_device_to_community_cosim(dvc1, dvc2):
     m2=dvc2.community_model.parameters()
     return compute_cosim_metric(m1,m2)
 
+def batch_cosine_similarity(device_list):
+    """
+    batch wise calculation of cosine similarities.
+    #TODO/NOTE:
+    """
+    # Stack model parameters and Normalize
+    model_matrix = torch.stack([torch.cat([param.flatten() for param in device.get_model().values()]) for device in device_list])
+    model_matrix = model_matrix / model_matrix.norm(dim=1, keepdim=True)
+
+    cosine_sim_matrix = model_matrix @ model_matrix.T
+
+    return cosine_sim_matrix
+
 #NOTE NEW Co-Sim Functions
 def compute_cosim_metric_from_state(state_dict1: dict, state_dict2: dict):
-    sim = 0
     cos = nn.CosineSimilarity(dim=0, eps=1e-6)
     # Iterate through the keys in the state dictionaries
-    for key in state_dict1:
-        if key in state_dict2:    # Flatten the tensors and compute cosine similarity
-            sim += abs(cos(state_dict1[key].flatten(), state_dict2[key].flatten()).item())
-    return sim
+    # for key in state_dict1:
+    #     if key in state_dict2:    # Flatten the tensors and compute cosine similarity
+    #         sim += abs(cos(state_dict1[key].flatten(), state_dict2[key].flatten()).item())
+    tensor_1 = torch.cat([param.flatten() for param in state_dict1.values()])
+    tensor_2 = torch.cat([param.flatten() for param in state_dict2.values()])
+
+    tensor_1 = tensor_1 / tensor_1.norm()
+    tensor_2 = tensor_2 / tensor_2.norm()
+
+    cosine_sim_matrix = cos(tensor_1, tensor_2)
+    return cosine_sim_matrix
 
 def compute_model_to_community_cosim(dvc1: Device, dvc2: Device):
     return compute_cosim_metric_from_state(dvc1.get_model(),dvc2.get_community_model())
@@ -246,6 +266,28 @@ class ProximityPreferentialAttachment(Algorithm):
         return nx.minimum_spanning_tree(
             temp,weight="weight",algorithm="kruskal")
 
+    def run_spatial_weighted_attachment(self, threshold=0.33, num_rounds=5):
+        self.NXG2 = self.init_with_minspantree()
+        G = self.NXG1
+        G2 = self.NXG2
+
+        for d in self.device_list:
+            neighbors = list(G.neighbors(d.id))
+            if not neighbors:
+                continue
+
+            # Calculate combined weights based on degree and spatial proximity
+            combined_weights = [
+                G2.degree(nid) / (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
+                for nid in neighbors
+            ]
+            combined_weights = np.array(combined_weights) / np.sum(combined_weights)
+
+            # Preferential attachment based on the combined metric
+            for attach in random.choices(neighbors, weights=combined_weights, k=num_rounds):
+                self.NXG2.add_edge(d.id, attach,
+                                   weight=self.Euclidean(self.device_list[d.id], self.device_list[attach]))
+
 
     def seeding_algorithm(self,num_seeds=5):
         # TODO: run seeding out of the other file without need for copying code
@@ -344,39 +386,112 @@ class CosineReassignment(Algorithm):
         for iter in range(max_iters):
             if changes < 2:
                 break
-            else:
-                changes = 0
-
+            changes = 0
             for dobj in self.device_list:
-                
-                dvc=dobj.id
-                if dvc in self.curr_apoints: #APoints stay fixed
+
+                dvc = dobj.id
+                if dvc in self.curr_apoints:  # APoints stay fixed
                     continue
-                
+
                 ## Similarity with "self" -- community model
-                max_cosim=compute_model_to_community_cosim(self.device_list[dvc],self.device_list[dvc])
-                max_nbr,max_color=dvc,self.device_list[dvc].color
-            
+                max_cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[dvc])
+                max_nbr = dvc
+
                 for nbr in self.NXG1.neighbors(dvc):
-                    
-                    # Similarity with it's neighbor's community
-                    cosim=compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
+                    # Similarity with its neighbor's community
+                    cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
                     if cosim > max_cosim:
-                        max_cosim,max_nbr,max_color=cosim,nbr,self.device_list[nbr].color
-                        self.device_list[dvc].parent_point = self.device_list[nbr].parent_point
+                        max_cosim, max_nbr = cosim, nbr
+                self.device_list[dvc].parent_point = self.device_list[max_nbr].parent_point
+                self.device_list[dvc].color = self.device_list[max_nbr].color
                 
                 # print(f"match? {dvc} : {max_nbr}, {max_cosim}")
                 if (max_nbr != dvc) and (iter == 0):
                     changes += 1
-                    print(f"Max Influence on {dvc}: {max_nbr}, {max_color}")
-                    ## print(self.device_list[dvc].community_model.state_dict()['conv1.bias'])
-                    ## print(self.device_list[nbr].community_model.state_dict()['conv1.bias'])
-                
-                self.device_list[dvc].color = max_color
             
         # Re-Set Communities after Comparisons
         self.assign_communities()
         return
+
+
+class DPP(ProximityPreferentialAttachment):
+    """
+    Combines Proximity Preferential Attachment and Cosine Reassignment.
+    """
+
+    def __init__(self, num_devices=25, num_classes=10, perceptual_map="turbo", threshold=10):
+        super().__init__(num_devices=num_devices, num_classes=num_classes, perceptual_map=perceptual_map,
+                         threshold=threshold)
+        self.sf_seeds = max(2, int(0.07 * num_devices))  # Seed value used in ProximityPreferentialAttachment
+        self.ap_param_stacks = {}  # Parameter stack used in CosineReassignment
+
+    def run_global_round_setup_steps(self, round=0):
+
+        self.update_coordinates(round)
+        self.run_linking_algorithm(round_num=round)
+
+    def run_local_aggregation_round(self, max_iterations=3):
+
+        self.compare_communities(max_iters=max_iterations)  # Cosine-based reassignment
+        return super().run_local_aggregation_round()
+
+    def run_linking_algorithm(self, round_num=0, threshold=10):
+
+        self.run_spatial_weighted_attachment(threshold=0.33)  # Proximity part
+        self.select_access_points_on_betweenness()
+        self.assign_communities()
+
+    def compare_communities(self, max_iters=10):
+
+        # Precompute cosine similarities in batch
+        # cosine_sim_matrix = batch_cosine_similarity(self.device_list)
+        # cosine_sim_matrix.fill_diagonal_(-float('inf')) #Ignore diagonal
+
+
+        # max_indices = torch.argmax(cosine_sim_matrix, dim=1)
+
+        for dobj in self.device_list:
+
+            dvc = dobj.id
+            if dvc in self.curr_apoints:  # APoints stay fixed
+                continue
+
+            ## Similarity with "self" -- community model
+            max_cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[dvc])
+            max_nbr = dvc
+
+            for nbr in self.NXG1.neighbors(dvc):
+                # Similarity with its neighbor's community
+                cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
+                if cosim > max_cosim:
+                    max_cosim, max_nbr = cosim, nbr
+            self.device_list[dvc].parent_point = self.device_list[max_nbr].parent_point
+            self.device_list[dvc].color = self.device_list[max_nbr].color
+
+        # for iter in range(max_iters):
+        #     if changes < 2:
+        #         break
+        #     else:
+        #         changes = 0
+        #     for dvc, dobj in enumerate(self.device_list):
+        #         if dvc in self.curr_apoints:  # Skip fixed access points
+        #             continue
+        #
+        #         # Find the community with the maximum similarity
+        #         max_cosim, max_color = cosine_sim_matrix[dvc, dvc], dobj.color
+        #         max_nbr = dvc
+        #         for nbr in self.NXG1.neighbors(dvc):
+        #             cosim = cosine_sim_matrix[dvc, nbr]
+        #             if cosim > max_cosim:
+        #                 max_cosim, max_nbr, max_color = cosim, nbr, self.device_list[nbr].color
+        #                 self.device_list[dvc].parent_point = self.device_list[nbr].parent_point
+        #         if max_nbr != dvc:
+        #             changes += 1
+        #         self.device_list[dvc].color = max_color
+        self.assign_communities()
+
+
+
 #-------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------
 ###NOTE: Other Ideas | Can Ignore | Prototype New Ideas Etc. 

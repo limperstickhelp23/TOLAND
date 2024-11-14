@@ -1,24 +1,18 @@
-from netsim.network import MobileNet
 from netsim.algorithms import *
-from deprecate.data_prepare import *
 from utils import *
 
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pickle import EMPTY_DICT
 
 from tqdm import tqdm
 
 import hydra
 import omegaconf
-import numpy as np
 import torch
-from hydra.core.hydra_config import HydraConfig
-from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 from deprecate.client import local_train, test
-from deprecate.data_prepare import prepare_dataset
+from data_prepare import prepare_dataset
 from deprecate.models import Net
 import colorama
 

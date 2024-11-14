@@ -5,6 +5,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 
+from data_prepare import prepare_dataset
 # from deprecate.client import local_train, test
 # from deprecate.data_prepare import prepare_dataset
 # from deprecate.models import Net

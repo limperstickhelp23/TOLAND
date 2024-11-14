@@ -6,7 +6,7 @@ import omegaconf
 from tqdm import tqdm
 
 from deprecate.client import local_train
-from deprecate.data_prepare import prepare_dataset
+from data_prepare import prepare_dataset
 from deprecate.models import Net
 from netsim.algorithms import *
 from utils import *

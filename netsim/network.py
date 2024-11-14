@@ -91,7 +91,6 @@ class Device:
     
     def set_step_coordinates(self,step=0):
         #NOTE: update positions at every GLOBAL round
-        print(step)
         row=pd.read_pickle(self.coordinate_path).iloc[step]
         self.x,self.y=row['geolat'],row['geolong']
         return
