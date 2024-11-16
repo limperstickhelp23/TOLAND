@@ -231,7 +231,7 @@ class ProximityPreferentialAttachment(Algorithm):
                 - Mobile Devices/Changing Topology
         """
         self.run_proximity_preferential_attachment(threshold=threshold)
-        # self.run_spatial_weighted_attachment()
+        # self.run_spatial_weighted_attachment(threshold=threshold)
         self.NXG1=copy.deepcopy(self.NXG2)
         self.select_access_points_on_betweenness()
         self.assign_communities()
@@ -314,7 +314,6 @@ class ProximityPreferentialAttachment(Algorithm):
         for _ in range(np.random.randint(12,24)): # num pulls=np.random.randint(12,24)
             (i,j)=random.sample(seeds,k=2)
             self.add_edge(i,j),sampler.append(i),sampler.append(j)
-
 
 class ScaleFreeRewiring(Algorithm):
     """ The Difference here from the baseline is that each round is a new scale-free topology. 
@@ -450,7 +449,7 @@ class DPP(Algorithm):
 
         self.run_spatial_weighted_attachment(threshold=threshold)  # Proximity part
         self.select_access_points_on_betweenness()
-        #self.compare_communities()
+        self.compare_communities()
         self.assign_communities()
 
     def run_spatial_weighted_attachment(self, threshold=0.75, num_rounds=6):
@@ -463,10 +462,10 @@ class DPP(Algorithm):
             neighbors = list(G.neighbors(d.id))
             if not neighbors:
                 continue
-            cosine_sim = device_neighbor_similarity(d.get_model(), neighbors, self.device_list)
+            #cosine_sim = device_neighbor_similarity(d.get_model(), neighbors, self.device_list)
             # Calculate combined weights based on degree and spatial proximity
             combined_weights = [
-                G2.degree(nid)*cosine_sim[nid]/ (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
+                G2.degree(nid)/ (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
                 for nid in neighbors
             ]
             combined_weights = np.array(combined_weights) / np.sum(combined_weights)
