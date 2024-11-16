@@ -66,6 +66,10 @@ def cloud(cfg:DictConfig):
     iid="iid" if cfg.config_data.iid else "non_iid"
     cfg.metric_path = cfg.metric_path.format(algorithm=file_path)
     cfg.figure_path = cfg.figure_path.format(algorithm=file_path)
+    cfg.gephi_path = cfg.gephi_path.format(algorithm=file_path)
+
+    os.makedirs(f"{cfg.gephi_path}/{iid}/", exist_ok=True)
+
     metpath=f"{cfg.metric_path}/{iid}/"
     figpath=f"{cfg.figure_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.figure_path}/{iid}/'))}/"
     gephipath=f"{cfg.gephi_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.gephi_path}/{iid}/'))}/"
@@ -74,8 +78,10 @@ def cloud(cfg:DictConfig):
         os.mkdir(metpath)
     if not os.path.exists(figpath):
         os.mkdir(figpath)
+    if not os.path.exists(gephipath):
+        os.mkdir(gephipath)
 
-
+    print(colorama.Fore.MAGENTA+ f'{cfg.algorithm} algorithm'+ colorama.Style.RESET_ALL)
     ###NOTE: Run
     for server_round in range(cfg.num_rounds):
         if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.945:
@@ -84,7 +90,7 @@ def cloud(cfg:DictConfig):
 
         NETWORK.run_global_round_setup_steps(server_round, threshold=THRESHOLD)
 
-        if server_round == 0 and cfg.algorithm != "star":
+        if server_round == 0 and cfg.algorithm != "star" and SAVE_FIGURES:
             CLASS_DIST["Starting Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
 
         DATA[server_round]={}
@@ -169,7 +175,7 @@ def cloud(cfg:DictConfig):
         print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy,"\n"+colorama.Style.RESET_ALL)
 
     DATA["total_run_cost"] = NETWORK.total_cost
-    if cfg.algorithm != "star":
+    if cfg.algorithm != "star" and SAVE_FIGURES:
         CLASS_DIST["Ending_Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
     print(f"{cfg.algorithm } cost ", NETWORK.total_cost)
     print(CLASS_DIST)

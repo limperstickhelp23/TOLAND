@@ -316,19 +316,21 @@ class Network:
         self.curr_apoints.sort()
         return assign, best_route
 
-    def select_access_points_on_betweenness(self):
+    def select_access_points_on_betweenness(self, switch=False):
         """Betweenness Centrality Determines Hubs"""
-        (access_points,_)=betweeness_rule(self.NXG1,top=self.num_apoints,weight='weight')
+        G = self.NXG2 if (switch) else self.NXG1
+        (access_points,_)=betweeness_rule(G,top=self.num_apoints,weight='weight')
         self.curr_apoints=list(access_points)
-        self.edge_nodes=list(set(self.NXG1.nodes)-set(access_points))
-        self.generate_access_point_assignments()   
+        self.edge_nodes=list(set(G.nodes)-set(access_points))
+        self.generate_access_point_assignments(switch=switch)
         self.reset_colors()     
         return
 
-    def generate_access_point_assignments(self): 
+    def generate_access_point_assignments(self, switch=False):
 
         self.isolates=[]
         self.assignments["AP"]=self.curr_apoints
+        top = 2 if (switch) else 1
         ## assign devices
         for ap in self.curr_apoints:
             self.assignments[ap]={"access_point":ap, "route":[ap]} 
@@ -340,7 +342,7 @@ class Network:
                 print(f"ERROR: AP should be excluded: {node}, {self.curr_apoints}")
                 return
             
-            (parent,route)=self.find_closest_point(node,weight="weight")
+            (parent,route)=self.find_closest_point(node,weight="weight", top=top)
             self.routes[node]=route
             
             if (route == []):

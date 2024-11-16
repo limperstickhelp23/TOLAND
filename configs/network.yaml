@@ -1,7 +1,7 @@
 algorithm: 'DPP' # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
-save_figures: True
+save_figures: False
 metric_path: "results/{algorithm}/metrics"
 figure_path: "results/{algorithm}/figures"
 gephi_path: "results/{algorithm}/gephis"

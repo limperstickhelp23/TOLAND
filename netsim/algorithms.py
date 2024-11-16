@@ -448,11 +448,11 @@ class DPP(Algorithm):
     def run_linking_algorithm(self, round_num=0, threshold=0.5):
 
         self.run_spatial_weighted_attachment(threshold=threshold)  # Proximity part
-        self.select_access_points_on_betweenness()
+        self.select_access_points_on_betweenness(switch=True)
         self.compare_communities()
         self.assign_communities()
 
-    def run_spatial_weighted_attachment(self, threshold=0.75, num_rounds=6):
+    def run_spatial_weighted_attachment(self, threshold=0.75, num_rounds=10):
         self.NXG2 = self.init_with_minspantree()
         self.fast_build_proximity_graph_(threshold)
         G = self.NXG1
