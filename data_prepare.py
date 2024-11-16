@@ -11,8 +11,8 @@ from omegaconf import DictConfig
 
 
 def get_mnist(data_path: str = "~/TOLAND/data"):
+
     """Download MNIST and apply minimal transformation."""
-    data_path = os.path.expanduser(data_path)
 
     tr = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
 
@@ -20,17 +20,20 @@ def get_mnist(data_path: str = "~/TOLAND/data"):
 
     trainset = MNIST(data_path, train=True, download=bool_, transform=tr)
     testset = MNIST(data_path, train=False, download=bool_, transform=tr)
-
     return trainset, testset
 
 def get_cifar10(data_path: str = "~/TOLAND/data"):
-    data_path = os.path.expanduser(data_path)
-    tr = Compose([ToTensor(), Normalize(0.1307, 0.3081)])
+    from shutil import rmtree
+    # Clear any existing CIFAR-10 datasets from the default location
 
-    bool_ = not os.path.exists(os.path.join(data_path, 'CIFAR10'))
+    os.path.join(data_path, 'CIFAR10')
+    os.makedirs(data_path, exist_ok=True)
+    tr = Compose([ToTensor(), Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
 
-    trainset = CIFAR10(data_path, train=True, download=bool_, transform=tr)
-    testset = CIFAR10(data_path, train=False, download=bool_, transform=tr)
+    bool_ = not os.path.exists(data_path)
+
+    trainset = CIFAR10(root=data_path, train=True, download=True, transform=tr)
+    testset = CIFAR10(root=data_path, train=False, download=True, transform=tr)
 
     return trainset, testset
 
@@ -52,6 +55,7 @@ def prepare_dataset(cfg : DictConfig, val_ratio: float = 0.1):
     # figure out number of training examples per partition
     # Calculate base size and remainder
     num_images = len(trainset) // num_partitions
+
     remainder = len(trainset) % num_partitions
 
     # Initialize partition_len with base size for each partition
@@ -61,11 +65,19 @@ def prepare_dataset(cfg : DictConfig, val_ratio: float = 0.1):
     for i in range(remainder):
         partition_len[i] += 1
 
-    if iid:
-        print("??")
-        trainsets = random_split(trainset, partition_len, torch.Generator().manual_seed(2023))
-    else:
-        trainsets = dirichlet_partition(trainset, partition_len, alpha)
+    try:
+        if iid:
+            trainsets = random_split(trainset, partition_len, torch.Generator().manual_seed(2025))
+        else:
+            trainsets = dirichlet_partition(trainset, partition_len, alpha)
+    except ValueError as ve:
+        print(f"Details: {ve}")
+        print(f"Error occurred in random_split: length of trainset: {len(trainset)} \n partition_len: {partition_len}.")
+    except Exception as e:
+        print("An unexpected error occurred.")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Details: {e}")
+        trainsets = None  # Optional fallback logic
 
     # create dataloaders with train+val support
     trainloaders = []
@@ -77,7 +89,7 @@ def prepare_dataset(cfg : DictConfig, val_ratio: float = 0.1):
         num_train = num_total - num_val
 
         for_train, for_val = random_split(
-            trainset_, [num_train, num_val], torch.Generator().manual_seed(2023)
+            trainset_, [num_train, num_val], torch.Generator().manual_seed(2025)
         )
 
         # construct data loaders and append to their respective list.
@@ -131,3 +143,5 @@ def dirichlet_partition(trainset, partition_len, alpha=0.5, num_classes=10):
 
     return partitioned_datasets
 
+if __name__ == "__main__":
+    get_cifar10()

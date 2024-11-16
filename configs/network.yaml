@@ -1,24 +1,25 @@
-algorithm: 'DPP' # scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
+algorithm: 'star' # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
+save_figures: True
 metric_path: "results/{algorithm}/metrics"
 figure_path: "results/{algorithm}/figures"
 
 
-num_rounds: 3
+num_rounds: 2
 num_classes: 10
 input_len: 1 # CIFAR: 3  MNIST: 1
-num_clients: 10
-aggregation_rounds: 2 # defaults to 1 if algorithm is 'star'
+num_clients: 99
+aggregation_rounds: 3 # defaults to 1 if algorithm is 'star'
 
 #####################
 # DATA PREPARE AND IID-ness
 config_data:
-  dataset: 'MNIST' # **Change input_len** 'MNIST', 'CIFAR-10'
+  dataset: 'MNIST' # **Change input_len** 'MNIST', 'CIFAR10'
   alpha: 0.1 # control how much iid needed in the dataset, lower the more non-iid.
   batch_size: 20
   num_partitions: null #Gets the same value as num_clients (do not change)
-  iid: 0 # bool 0:iid  1:non-iid
+  iid: 0 # bool 1:iid  0:non-iid
 
 ###################
 # DEVICE PARAMETERS

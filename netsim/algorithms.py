@@ -77,7 +77,7 @@ class Algorithm(Network):
     def run_global_round_setup_steps(self,round=0):
         print("Implement in child classes")
         print("Did Star flag work ", self.star)
-        
+
         #NOTE: i think generally just contains these 2 steps
         
         # Simulate Movements
@@ -108,7 +108,7 @@ class Algorithm(Network):
         return ap_avg_state_dict
     
     def run_linking_algorithm(self,star=False):
-        """Just a default behavior. 
+        """Just a default behavior.
             Pass "star" Flag to do nothing at this round (trivial behavior)
         """
         if (self.star):
@@ -123,7 +123,7 @@ class Algorithm(Network):
             torch.save(model, self.device_list[n].model_path)
     
     def assign_communities(self):
-        """ Reset Communities After Organizing & After Training 
+        """ Reset Communities After Organizing & After Training
                 - ap_member_map: Key(AP) Value(List of Members)
                 - ap_param_stacks: Directly Looks Up From Each Device Model
         """
@@ -132,7 +132,7 @@ class Algorithm(Network):
         for d in self.device_list:
             self.ap_member_map[d.parent_point].append(d.id)
         
-        self.reset_colors() 
+        self.reset_colors()
 
 #BASELINE
 class Baselines(Algorithm):
@@ -205,12 +205,13 @@ class ProximityPreferentialAttachment(Algorithm):
                 - Mobile Devices/Changing Topology
         """
         self.run_proximity_preferential_attachment()
+        # self.run_spatial_weighted_attachment()
         self.NXG1=copy.deepcopy(self.NXG2)
         self.select_access_points_on_betweenness()
         self.assign_communities()
 
 
-    def run_proximity_preferential_attachment(self,threshold=.33,num_seeds=5,num_rounds=5,oporder=1):
+    def run_proximity_preferential_attachment(self,threshold=.50,num_seeds=5,num_rounds=5,oporder=1):
         # G1 is a placeholder with which to build G2
         # G2 is initialized either with some seed nodes or minspantree
         self.NXG2=self.init_with_minspantree()
@@ -269,8 +270,9 @@ class ProximityPreferentialAttachment(Algorithm):
         return nx.minimum_spanning_tree(
             temp,weight="weight",algorithm="kruskal")
 
-    def run_spatial_weighted_attachment(self, threshold=0.33, num_rounds=5):
+    def run_spatial_weighted_attachment(self, threshold=0.50, num_rounds=6):
         self.NXG2 = self.init_with_minspantree()
+        self.fast_build_proximity_graph_(threshold)
         G = self.NXG1
         G2 = self.NXG2
 
@@ -411,7 +413,7 @@ class CosineReassignment(Algorithm):
                 self.device_list[dvc].color = self.device_list[max_nbr].color
                 
                 # print(f"match? {dvc} : {max_nbr}, {max_cosim}")
-                if (max_nbr != dvc) and (iter == 0):
+                if (max_nbr != dvc):
                     changes += 1
             
         # Re-Set Communities after Comparisons
@@ -442,7 +444,7 @@ class DPP(ProximityPreferentialAttachment):
 
     def run_linking_algorithm(self, round_num=0, threshold=10):
 
-        self.run_spatial_weighted_attachment(threshold=0.33)  # Proximity part
+        self.run_spatial_weighted_attachment(threshold=0.7)  # Proximity part
         self.select_access_points_on_betweenness()
         self.assign_communities()
 
@@ -465,7 +467,7 @@ class DPP(ProximityPreferentialAttachment):
             max_cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[dvc])
             max_nbr = dvc
 
-            for nbr in self.NXG1.neighbors(dvc):
+            for nbr in self.NXG2.neighbors(dvc):
                 # Similarity with its neighbor's community
                 cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
                 # Count Cost of Comparing
@@ -475,26 +477,6 @@ class DPP(ProximityPreferentialAttachment):
             self.device_list[dvc].parent_point = self.device_list[max_nbr].parent_point
             self.device_list[dvc].color = self.device_list[max_nbr].color
 
-        # for iter in range(max_iters):
-        #     if changes < 2:
-        #         break
-        #     else:
-        #         changes = 0
-        #     for dvc, dobj in enumerate(self.device_list):
-        #         if dvc in self.curr_apoints:  # Skip fixed access points
-        #             continue
-        #
-        #         # Find the community with the maximum similarity
-        #         max_cosim, max_color = cosine_sim_matrix[dvc, dvc], dobj.color
-        #         max_nbr = dvc
-        #         for nbr in self.NXG1.neighbors(dvc):
-        #             cosim = cosine_sim_matrix[dvc, nbr]
-        #             if cosim > max_cosim:
-        #                 max_cosim, max_nbr, max_color = cosim, nbr, self.device_list[nbr].color
-        #                 self.device_list[dvc].parent_point = self.device_list[nbr].parent_point
-        #         if max_nbr != dvc:
-        #             changes += 1
-        #         self.device_list[dvc].color = max_color
         self.assign_communities()
 
 

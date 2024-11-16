@@ -1,22 +1,21 @@
 # from netsim.network import Network
+import time
 import warnings  # Suppress all warnings # NOTE: some complaints from torch and plotting stuff
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import colorama
 import hydra
 import omegaconf
-from tqdm import tqdm
 
+import matplotlib.pyplot as plt
 from data_prepare import *
 from netsim.algorithms import *
 from utils import *
-from utils import Net
 
 warnings.filterwarnings("ignore")
 
 #NOTE SETTINGS / Set algorithm here
 CONFIG_NAME= "network"  # "scalefree", "network", "star", "cosine"
-WORKERS=10
+WORKERS=15
 THRESHOLD=10 # NOTE: does nothing -- threshold parameter is set at algorithm level
 
 
@@ -27,8 +26,9 @@ def cloud(cfg:DictConfig):
     omegaconf.OmegaConf.to_yaml(cfg)
     cfg.config_data.num_partitions = cfg.num_clients
     SAVE_RESULTS = cfg.save_results
+    SAVE_FIGURES = cfg.save_figures
     DATA,NETWORK={},None
-    DATA["cloud"]={"losses":[],"accuracies":[]}
+    DATA["cloud"]={"losses":[],"accuracies":[], "Wall_Clock":[]}
 
     SUFFIX = f"_TEST_{cfg.config_data.dataset}"
 
@@ -51,8 +51,9 @@ def cloud(cfg:DictConfig):
         file_path = f'proxpref'
         NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     elif cfg.algorithm == "star":
-        file_path = f'baselines/{cfg.algorithm}' 
-        NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,star=True)  #NOTE: pass Boolean star flag
+        cfg.aggregation_rounds = 1
+        file_path = f'baselines/{cfg.algorithm}'
+        NETWORK=Baselines(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     elif cfg.algorithm == "DPP":
         file_path = f'DPP'
         NETWORK = DPP(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
@@ -71,9 +72,10 @@ def cloud(cfg:DictConfig):
         os.mkdir(figpath)
 
     ###NOTE: Run
-    for server_round in range(1, cfg.num_rounds+1):
-        
-        print(colorama.Fore.LIGHTBLUE_EX + f'Starting server round {server_round}'+ colorama.Style.RESET_ALL)
+    for server_round in range(cfg.num_rounds):
+        if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.945:
+            break
+        print(colorama.Fore.LIGHTBLUE_EX + f'Starting server round {server_round+1}'+ colorama.Style.RESET_ALL)
         NETWORK.run_global_round_setup_steps(server_round)
         DATA[server_round]={}
         ap_avg_state_dict = []
@@ -87,21 +89,20 @@ def cloud(cfg:DictConfig):
             NETWORK.calculate_server_distribution_aggregation_cost(mode="ap")
             NETWORK.calculate_server_distribution_aggregation_cost(mode="ap") # 2x for agg and distribution
 
-        for aggr_round in range(1, cfg.aggregation_rounds+1):
-
-            # Distribution + Aggregation Cost:
-            if (cfg.algorithm != "star"):
-                NETWORK.calculate_ap_distribution_aggregation_cost()
-                NETWORK.calculate_ap_distribution_aggregation_cost() # 2x for agg and distribution
+        start_time = time.time()
+        for aggr_round in range(cfg.aggregation_rounds):
             if SAVE_RESULTS:
                 os.makedirs(figpath, exist_ok=True)
                 NETWORK.plot_communities(spring=True)
                 plt.title(f"Round {server_round} Communities")
                 plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
                 #TODO: check on making GEPHI files
-
+            if (cfg.algorithm != "star"):
+                NETWORK.calculate_ap_distribution_aggregation_cost()
+                NETWORK.calculate_ap_distribution_aggregation_cost() # 2x for agg and distribution
             state_dict_map = {}
-            if aggr_round == 1:
+            print(f'aggr_round: {aggr_round}')
+            if aggr_round == 0:
                 state_dict_map = {i: network_model.state_dict() for i in range(cfg.num_clients)}
             else :
                 state_dict_map = { member: ap_avg_state_dict[AP]
@@ -130,9 +131,11 @@ def cloud(cfg:DictConfig):
 
         #NOTE: Globally Evaluate
         network_model.load_state_dict(net_state_dict)
+        end_time = time.time()
         g_loss, g_accuracy = test(network_model, testloader, device)
         DATA["cloud"]["losses"].append(g_loss)
         DATA["cloud"]["accuracies"].append(g_accuracy)
+        DATA["cloud"]["Wall_Clock"].append(start_time-end_time)
         print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy,"\n"+colorama.Style.RESET_ALL)
 
     DATA["total_run_cost"] = NETWORK.total_cost

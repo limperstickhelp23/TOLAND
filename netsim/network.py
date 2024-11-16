@@ -15,9 +15,18 @@ from pathlib import Path
 import os
 
 # NOTE: manual color map | use built-ins from matplotlib
-COLORS=[
-    "red","blue","gold","green","lavender","magenta","orange","grey","firebrick","brown","tab:blue","darkgreen","indigo",
-    "black", "teal", "bisque", "mediumturquoise", "darkviolet"
+COLORS = [
+    "red", "blue", "gold", "green", "lavender", "magenta", "orange", "grey", "firebrick", "brown",
+    "tab:blue", "darkgreen", "indigo", "black", "teal", "bisque", "mediumturquoise", "darkviolet",
+    "aqua", "coral", "cyan", "hotpink", "lightgreen", "navy", "orchid", "slateblue", "tab:orange",
+    "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink", "tab:grey", "lightblue", "lime",
+    "crimson", "maroon", "darkorange", "fuchsia", "turquoise", "salmon", "sienna", "tomato", "plum",
+    "khaki", "peru", "violet", "steelblue", "darkkhaki", "skyblue", "thistle", "lightcoral", "rosybrown",
+    "seagreen", "goldenrod", "slategrey", "cadetblue", "mediumvioletred", "darkcyan", "forestgreen",
+    "mintcream", "papayawhip", "peachpuff", "powderblue", "purple", "royalblue", "saddlebrown", "yellow",
+    "chartreuse", "dodgerblue", "deepskyblue", "dimgray", "gainsboro", "honeydew", "lightgoldenrodyellow",
+    "lightgrey", "mistyrose", "moccasin", "navajowhite", "oldlace", "palegreen", "palevioletred", "seashell",
+    "springgreen", "tan", "wheat", "whitesmoke"
 ]
 ROOT=Path(__file__).resolve().parent.parent
 
@@ -138,7 +147,7 @@ class Network:
         self.reset_topologies()
 
         #NOTE: choose location of server or somehow otherwise compute the cost of talking to server
-        self.server=Device() 
+        self.server=Device()
         self.server.x,self.server.y = 30.2994,-97.6858 # ATT tower on Manor Road
         self.total_cost = 0
 
@@ -146,7 +155,7 @@ class Network:
         return np.sqrt(
             np.linalg.norm( np.array([d1.x,d1.y]) - np.array([d2.x,d2.y]))
         )
-    
+
     def update_coordinates(self,step):
         """NOTE: the 'movement' function from data
         """
@@ -167,7 +176,7 @@ class Network:
         self.colors={}
         for (n,(ap,vals)) in enumerate(sorted(self.ap_member_map.items())):
             if len(self.cmap) > n:
-                print("n ", n, "length ", len(self.cmap))
+                #print("n ", n, "length ", len(self.cmap))
                 self.colors[self.cmap[n]]=vals
             else:
                 ii=n-len(self.cmap)
@@ -221,6 +230,15 @@ class Network:
         self.A=A
         G=nx.from_numpy_array(A)
         self.NXG1=self.populate_edge_weights(G)
+
+    def fast_build_proximity_graph_(self, threshold=10):
+        self.threshold = threshold
+        coords = np.array([(device.x, device.y) for device in self.device_list])
+        distances = np.linalg.norm(coords[:, np.newaxis] - coords, axis=2)
+        self.A = (distances < self.threshold).astype(int)
+        np.fill_diagonal(self.A, 0)
+        self.NXG1 = self.populate_edge_weights(G=nx.from_numpy_array(self.A))
+        return
 
     def build_proximity_graph(self,threshold=10):
         self.A=np.zeros([self.N,self.N])
@@ -409,7 +427,7 @@ class Network:
             # nx.draw_networkx_edge_labels(NXG, pos, edge_labels=rounded_edge_labels)
             for (k,v) in rounded_edge_labels.items():
                 print(k, " : ", v)
-    
+
     def plot_communities(self,ax=None, spring=False,which=2):
 
         G=self.NXG2 if which == 2 else self.NXG1
@@ -443,7 +461,7 @@ class Network:
                 self.total_cost+=self.Euclidean(self.device_list[ap],self.server)
         else:
             print("unknown")
-    
+
     def calculate_ap_distribution_aggregation_cost(self):
         for (k,members) in self.ap_member_map.items():
             self.total_cost+=np.sum([self.Euclidean(self.device_list[k],self.device_list[m]) for m in members])

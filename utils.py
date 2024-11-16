@@ -149,19 +149,50 @@ def get_ap_metrics(ap_avg_state_dict, path, server_round, a, model, testloaders,
             loss, accuracy = test(model, testloaders[AP], device)
             file.write(f"{AP} : \n\tloss: {loss} \n\taccuracy: {accuracy}\n")
 
+from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
+from tqdm import tqdm
+
+def test_model(AP_state, testloaders, device):
+    AP, state_dict = AP_state
+    model = Net(10, 1)  # Replace with your model creation function
+    model.load_state_dict(state_dict)
+    loss, accuracy = test(model, testloaders[AP], device)
+    return AP, loss, accuracy
+
 def update_ap_metrics(ap_avg_state_dict,model,testloaders,device):
-    losses,accuracies=[],[]
-    for (AP, state_dict) in tqdm(ap_avg_state_dict.items(), desc='Testing clients'):
-        model.load_state_dict(state_dict),
-        loss, accuracy = test(model, testloaders[AP], device)
+    # Prepare the list of arguments for each process
+    losses, accuracies = [], []
+    ap_nodes=[]
+    AP_states = list(ap_avg_state_dict.items())
+
+    pool = ThreadPoolExecutor(max_workers=10)
+    futures = {pool.submit(test_model, AP_state, testloaders, device): AP_state[0] for AP_state in AP_states}
+
+    # Collect results as they complete
+    for future in tqdm(as_completed(futures), total=len(futures), desc='Testing clients'):
+        AP, loss, accuracy = future.result()
+        ap_nodes.append(AP)
         losses.append(loss)
         accuracies.append(accuracy)
-    
+    pool.shutdown(wait=True)
     return {
-        "ap_nodes":list(ap_avg_state_dict.keys()),
-        "losses":losses, 
-        "accuracies":accuracies
+        "ap_nodes": ap_nodes,
+        "losses": losses,
+        "accuracies": accuracies
     }
+# def update_ap_metrics(ap_avg_state_dict,model,testloaders,device):
+#     losses,accuracies=[],[]
+#     for (AP, state_dict) in tqdm(ap_avg_state_dict.items(), desc='Testing clients'):
+#         model.load_state_dict(state_dict),
+#         loss, accuracy = test(model, testloaders[AP], device)
+#         losses.append(loss)
+#         accuracies.append(accuracy)
+#
+#     return {
+#         "ap_nodes":list(ap_avg_state_dict.keys()),
+#         "losses":losses,
+#         "accuracies":accuracies
+#     }
 
 ##################################
 # MISCELLANEOUS METHODS
