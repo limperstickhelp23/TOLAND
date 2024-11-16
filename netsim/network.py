@@ -138,14 +138,15 @@ class Network:
         self.reset_topologies()
 
         #NOTE: choose location of server or somehow otherwise compute the cost of talking to server
-        # self.server=Device() 
-        # self.server.x,self.server.y = 98,98
-        
-    
+        self.server=Device() 
+        self.server.x,self.server.y = 30.2994,-97.6858 # ATT tower on Manor Road
+        self.total_cost = 0
+
     def Euclidean(self,d1:Device, d2:Device):
         return np.sqrt(
             np.linalg.norm( np.array([d1.x,d1.y]) - np.array([d2.x,d2.y]))
-    )
+        )
+    
     def update_coordinates(self,step):
         """NOTE: the 'movement' function from data
         """
@@ -165,9 +166,6 @@ class Network:
         """
         self.colors={}
         for (n,(ap,vals)) in enumerate(sorted(self.ap_member_map.items())):
-            # self.device_list[ap].color=self.cmap[n]
-            print("num apoints: ", n)
-            print("num colors: ", len(self.cmap))
             if len(self.cmap) > n:
                 print("n ", n, "length ", len(self.cmap))
                 self.colors[self.cmap[n]]=vals
@@ -347,21 +345,6 @@ class Network:
                 if pt not in self.curr_apoints:
                     self.curr_apoints.append(pt)
         return
-
-    def assignments_to_yaml(self, filename="sim_config.yaml"):
-        """ NOTE: WIP -- needs updating
-        """
-        with open(filename,"w") as f:
-            yaml.dump(self.assignments,f,default_flow_style=False)
-        return 
-
-    def positions_to_yaml(self,path="node_coordinates.yaml"):
-        #NOTE: not necessary
-        with open(path,"w") as f:
-            yaml.dump(
-                {d.id: [d.x,d.y] for d in self.device_list},f,default_flow_style=False
-            )
-        return
     
     def plot_positions(self):
         pos=self.get_positions()
@@ -426,26 +409,6 @@ class Network:
             # nx.draw_networkx_edge_labels(NXG, pos, edge_labels=rounded_edge_labels)
             for (k,v) in rounded_edge_labels.items():
                 print(k, " : ", v)
-
-    def plot_spring_communities(self):
-        
-        G=self.NXG2
-        new_node_id = max(G.nodes) + 1
-        G.add_node(new_node_id)
-        for ap in self.curr_apoints:
-            G.add_edge(new_node_id,ap)
-
-        plt.figure(figsize=(8, 6))
-        pos = nx.spring_layout(G, center=(0, 0),  k=0.5, iterations=150)
-        for node_color, nodelist in self.colors.items():
-            nx.draw_networkx_nodes(
-                G, pos, nodelist=nodelist, node_color=node_color, node_size=100
-            )
-        nx.draw_networkx_edges(G, pos, edgelist=G.edges())
-        nx.draw_networkx_nodes(G, pos, nodelist=[new_node_id], 
-                            node_color="gold", node_size=1200, node_shape='*', label="Server")
-        return
-    
     
     def plot_communities(self,ax=None, spring=False,which=2):
 
@@ -469,32 +432,32 @@ class Network:
             # labels = {x: x for x in G.nodes}
         nx.draw_networkx_edges(G, pos, edgelist=G.edges(),width=.35, alpha=0.55,ax=ax)
 
-## TODO:
-# def cost_of_route(route,threshold=10):
-
-#     cost = 0
-#     tower_calls = 0
-#     d2d_links=0
-#     for (n,node) in enumerate(route):
-#         if n == len(route)-1:
-#             break
-#         D=Euclidean(DEVCS[n],DEVCS[n+1])
-#         if D > threshold:
-#             c1 = (Euclidean(TOWER,DEVCS[n])**2)
-#             c2 = (Euclidean(TOWER,DEVCS[n+1])**2)
-#             cost += c1+c2
-#             # print("Tower: ", c1+c2)
-#             tower_calls += 1
-#         else:
-#             # print("D2D: ", (D**2))
-#             cost += (D**2)
-#             d2d_links+=1
-        
-#     print("Total Tower calls, ", tower_calls)
-#     print("D2D links, ", d2d_links)
+    ## NOTE: New for Mielstone 2
+    def calculate_server_distribution_aggregation_cost(self,mode="ap"):
+        SERVER_LOC = [30.2994,-97.6858]  # ATT Server
+        if mode == "star":
+            for d in self.device_list:
+                self.total_cost+=self.Euclidean(d,self.server)
+        elif mode == "ap":
+            for ap in self.curr_apoints:
+                self.total_cost+=self.Euclidean(self.device_list[ap],self.server)
+        else:
+            print("unknown")
     
-#     return cost
+    def calculate_ap_distribution_aggregation_cost(self):
+        for (k,members) in self.ap_member_map.items():
+            self.total_cost+=np.sum([self.Euclidean(self.device_list[k],self.device_list[m]) for m in members])
 
+
+
+
+
+
+
+
+
+
+# TODO : Deprectate this (??)
 class GraphGenerator:
     """ 
         Build adjaceny matrix and save to a txt file.

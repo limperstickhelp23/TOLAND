@@ -9,7 +9,6 @@ from tqdm import tqdm
 
 #NOTE: Some UTILS
 def compute_cosim_metric(m1: nn.Parameter, m2: nn.Parameter):
-    #TODO/NOTE: this has to change if we move to using files instead
     sim,cos=0, nn.CosineSimilarity(dim=0, eps=1e-6)
     for (p1,p2) in zip(m1,m2):
         layer_sim=abs(cos(p1.data.flatten(),p2.data.flatten()).item())
@@ -17,13 +16,11 @@ def compute_cosim_metric(m1: nn.Parameter, m2: nn.Parameter):
     return sim
 
 def compute_device_model_cosim_metric(dvc1, dvc2):
-    #TODO/NOTE: this has to change if we move to using files instead
     m1=dvc1.model.parameters()
     m2=dvc2.model.parameters()
     return compute_cosim_metric(m1,m2)
 
 def compute_device_to_community_cosim(dvc1, dvc2):
-    #TODO/NOTE: this has to change if we move to using files instead
     m1=dvc1.model.parameters()
     m2=dvc2.community_model.parameters()
     return compute_cosim_metric(m1,m2)
@@ -70,14 +67,16 @@ class Algorithm(Network):
         It is just another wrapper for a few abstract methdods hanlding community assignment and local aggregating.
     """
     
-    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo",threshold=10):
+    def __init__(self,num_devices=25,num_classes=10,perceptual_map="turbo",threshold=10,star=False):
         super().__init__(num_devices=num_devices,num_classes=num_classes,perceptual_map=perceptual_map,threshold=threshold)
         self.ap_param_stacks={}
         self.sf_seeds=max(2,int((.10)*num_devices))
         self.update_coordinates(0)
+        self.star = star
 
     def run_global_round_setup_steps(self,round=0):
         print("Implement in child classes")
+        print("Did Star flag work ", self.star)
         
         #NOTE: i think generally just contains these 2 steps
         
@@ -87,29 +86,36 @@ class Algorithm(Network):
         # Re-linking Algorithm
         self.run_linking_algorithm() # Custom relinking methods
         
-        # whatever else TODO before training 
+        # whatever else TODO before training
+        if (self.star):
+            N=len(self.device_list)
+            self.ap_member_map={N:[i for i in range(N)]} #NOTE The trivial map which includes all
       
         return None
     
     def run_local_aggregation_round(self):        
         """ The local aggregation round maps parameters internally.
-                This way each device knows its community parameters.
+            This way each device knows its community parameters.
+            The Trivial star map is just a single entry with all devices.
         """
         ap_avg_state_dict={} #NOTE: temp variable to match back semantically to cloud.py
         for (AP,members) in self.ap_member_map.items():
-            #NOTE New Step: First load param_stacks based on files and current ap_member_map
-            # ap_parameter_stack=[torch.load(self.device_list[member].model_path) for member in members]
+            #NOTE New Step: Load from files using the current ap_member_map
             ap_avg_state_dict[AP]=aggregate_params(
                 [torch.load(self.device_list[member].model_path) for member in members]
             )
         #NOTE For additional logic, override in child class
         return ap_avg_state_dict
     
-    def run_linking_algorithm(self):
-        #TODO: just a default -- in general this should be unique to each algorithm 
+    def run_linking_algorithm(self,star=False):
+        """Just a default behavior. 
+            Pass "star" Flag to do nothing at this round (trivial behavior)
+        """
+        if (self.star):
+            return
         self.build_proximity_graph(threshold=10)
         self.select_access_points_on_betweenness()
-        print(self.ap_member_map)
+        # print(self.ap_member_map)
 
     def map_results_to_files(self,results):
         for (n,model,device) in results:
@@ -117,19 +123,16 @@ class Algorithm(Network):
             torch.save(model, self.device_list[n].model_path)
     
     def assign_communities(self):
-        """
-        Simulated Version: (Same as Integrated Version ?)
-            Re-Set Communities After Organizing & After Training 
-                ap_member_map: Key(AP) Value(List of Members)
-                ap_param_stacks: Directly Looks Up From Each Device Model
+        """ Reset Communities After Organizing & After Training 
+                - ap_member_map: Key(AP) Value(List of Members)
+                - ap_param_stacks: Directly Looks Up From Each Device Model
         """
         self.ap_member_map={ap:[] for ap in self.curr_apoints}
 
         for d in self.device_list:
             self.ap_member_map[d.parent_point].append(d.id)
-            # self.ap_param_stacks[d.parent_point].append(d.model.state_dict()) #NOTE: DEPRECATE not needed anymore
         
-        # self.reset_colors() # NOTE: whoops forgot this before
+        self.reset_colors() 
 
 #BASELINE
 class Baselines(Algorithm):
@@ -400,6 +403,8 @@ class CosineReassignment(Algorithm):
                 for nbr in self.NXG1.neighbors(dvc):
                     # Similarity with its neighbor's community
                     cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
+                    # Count Cost of Comparing
+                    self.total_cost += self.Euclidean(self.device_list[dvc], self.device_list[nbr])
                     if cosim > max_cosim:
                         max_cosim, max_nbr = cosim, nbr
                 self.device_list[dvc].parent_point = self.device_list[max_nbr].parent_point
@@ -463,6 +468,8 @@ class DPP(ProximityPreferentialAttachment):
             for nbr in self.NXG1.neighbors(dvc):
                 # Similarity with its neighbor's community
                 cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
+                # Count Cost of Comparing
+                self.total_cost += self.Euclidean(self.device_list[dvc], self.device_list[nbr])
                 if cosim > max_cosim:
                     max_cosim, max_nbr = cosim, nbr
             self.device_list[dvc].parent_point = self.device_list[max_nbr].parent_point

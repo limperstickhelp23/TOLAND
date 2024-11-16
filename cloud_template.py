@@ -51,8 +51,8 @@ def cloud(cfg:DictConfig):
         file_path = f'proxpref'
         NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     elif cfg.algorithm == "star":
-        file_path = f'baselines/{cfg.algorithm}'
-        return
+        file_path = f'baselines/{cfg.algorithm}' 
+        NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,star=True)  #NOTE: pass Boolean star flag
     elif cfg.algorithm == "DPP":
         file_path = f'DPP'
         NETWORK = DPP(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
@@ -65,19 +65,40 @@ def cloud(cfg:DictConfig):
     cfg.figure_path = cfg.figure_path.format(algorithm=file_path)
     metpath=f"{cfg.metric_path}/{iid}/"
     figpath=f"{cfg.figure_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.figure_path}/{iid}/'))}/"
+    if not os.path.exists(metpath):
+        os.mkdir(metpath)
+    if not os.path.exists(figpath):
+        os.mkdir(figpath)
 
     ###NOTE: Run
     for server_round in range(1, cfg.num_rounds+1):
+        
         print(colorama.Fore.LIGHTBLUE_EX + f'Starting server round {server_round}'+ colorama.Style.RESET_ALL)
         NETWORK.run_global_round_setup_steps(server_round)
         DATA[server_round]={}
         ap_avg_state_dict = []
+
+        # Distribution + Aggregation Cost
+        if (cfg.algorithm == "star"):
+            print("hello world")
+            NETWORK.calculate_server_distribution_aggregation_cost(mode="star")
+            NETWORK.calculate_server_distribution_aggregation_cost(mode="star") # 2x for agg and distribution
+        else:
+            NETWORK.calculate_server_distribution_aggregation_cost(mode="ap")
+            NETWORK.calculate_server_distribution_aggregation_cost(mode="ap") # 2x for agg and distribution
+
         for aggr_round in range(1, cfg.aggregation_rounds+1):
+
+            # Distribution + Aggregation Cost:
+            if (cfg.algorithm != "star"):
+                NETWORK.calculate_ap_distribution_aggregation_cost()
+                NETWORK.calculate_ap_distribution_aggregation_cost() # 2x for agg and distribution
             if SAVE_RESULTS:
                 os.makedirs(figpath, exist_ok=True)
                 NETWORK.plot_communities(spring=True)
                 plt.title(f"Round {server_round} Communities")
                 plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
+                #TODO: check on making GEPHI files
 
             state_dict_map = {}
             if aggr_round == 1:
@@ -101,6 +122,8 @@ def cloud(cfg:DictConfig):
 
             NETWORK.map_results_to_files(results)
             ap_avg_state_dict = NETWORK.run_local_aggregation_round()
+            if (cfg.algorithm == "star"):
+                break # No additional steps needed
             DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, Net(cfg.num_classes, cfg.input_len), validationloaders, device)
 
         net_state_dict = aggregate_params(list(ap_avg_state_dict.values()))
@@ -112,7 +135,8 @@ def cloud(cfg:DictConfig):
         DATA["cloud"]["accuracies"].append(g_accuracy)
         print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy,"\n"+colorama.Style.RESET_ALL)
 
-
+    DATA["total_run_cost"] = NETWORK.total_cost
+    print(f"{cfg.algorithm } cost ", NETWORK.total_cost)
     if SAVE_RESULTS:
         lgth=len(os.listdir(f"{metpath}/"))
         with open(f"{metpath}/run_{lgth}_{SUFFIX}.json", "w") as file:
