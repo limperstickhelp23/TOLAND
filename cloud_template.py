@@ -16,22 +16,11 @@ warnings.filterwarnings("ignore")
 
 #NOTE SETTINGS / Set algorithm here
 CONFIG_NAME= "network"  # "scalefree", "network", "star", "cosine"
-WORKERS=15
-THRESHOLD=0.5 # NOTE: does nothing -- threshold parameter is set at algorithm level
+WORKERS=20
+THRESHOLD=0.65
 
 
-def get_community_class_distribuitions(trainloaders, ap_member_map):
-    class_counter = Counter()
-    community_datasets = {int: []}
-    community_class_dist = {}
-    for AP, members in ap_member_map.items():
-        [community_datasets[AP].append(trainloaders[member]) for member in members]
-    for AP, trainloaders in community_datasets.items():
-        for trainloader in trainloaders:
-            for _, labels in trainloader:
-                class_counter.update(labels.tolist())
-        community_class_dist[AP] = dict(class_counter)
-    return community_class_dist
+
 
 @hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
 def cloud(cfg:DictConfig):
@@ -85,15 +74,19 @@ def cloud(cfg:DictConfig):
         os.mkdir(metpath)
     if not os.path.exists(figpath):
         os.mkdir(figpath)
-    if cfg.algorithm != "star":
-        CLASS_DIST["Starting Communities"] = get_community_class_distribuitions(trainloaders, NETWORK.ap_member_map)
+
 
     ###NOTE: Run
     for server_round in range(cfg.num_rounds):
         if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.945:
             break
         print(colorama.Fore.LIGHTBLUE_EX + f'Starting server round {server_round+1}'+ colorama.Style.RESET_ALL)
-        NETWORK.run_global_round_setup_steps(server_round)
+
+        NETWORK.run_global_round_setup_steps(server_round, threshold=THRESHOLD)
+
+        if server_round == 0 and cfg.algorithm != "star":
+            CLASS_DIST["Starting Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
+
         DATA[server_round]={}
         ap_avg_state_dict = []
 
@@ -138,7 +131,7 @@ def cloud(cfg:DictConfig):
                     nx.write_gexf(NETWORK.NXG2, gephipath+f"{server_round}_{aggr_round}_{SUFFIX}.gexf") #TODO: check on making GEPHI files
             
             state_dict_map = {}
-            print(f'aggr_round: {aggr_round}')
+            print(f'aggr_round: {aggr_round+1}')
             if aggr_round == 0:
                 state_dict_map = {i: network_model.state_dict() for i in range(cfg.num_clients)}
             else :
@@ -162,7 +155,7 @@ def cloud(cfg:DictConfig):
             ap_avg_state_dict = NETWORK.run_local_aggregation_round()
             if (cfg.algorithm == "star"):
                 break # No additional steps needed
-            DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, Net(cfg.num_classes, cfg.input_len), validationloaders, device)
+            DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, Net(cfg.num_classes, cfg.input_len), validationloaders, device, MAX_WORKERS=WORKERS)
 
         net_state_dict = aggregate_params(list(ap_avg_state_dict.values()))
 
@@ -177,8 +170,9 @@ def cloud(cfg:DictConfig):
 
     DATA["total_run_cost"] = NETWORK.total_cost
     if cfg.algorithm != "star":
-        CLASS_DIST["Ending_Communities"] = get_community_class_distribuitions(trainloaders, NETWORK.ap_member_map)
+        CLASS_DIST["Ending_Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
     print(f"{cfg.algorithm } cost ", NETWORK.total_cost)
+    print(CLASS_DIST)
     if SAVE_RESULTS:
         lgth=len(os.listdir(f"{metpath}/"))
         with open(f"{metpath}/run_{lgth}_{SUFFIX}.json", "w") as file:

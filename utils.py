@@ -1,3 +1,5 @@
+import multiprocessing
+
 import networkx as nx
 import torch
 import os
@@ -159,13 +161,13 @@ def test_model(AP_state, testloaders, device):
     loss, accuracy = test(model, testloaders[AP], device)
     return AP, loss, accuracy
 
-def update_ap_metrics(ap_avg_state_dict,model,testloaders,device):
+def update_ap_metrics(ap_avg_state_dict,model,testloaders,device, MAX_WORKERS=20):
     # Prepare the list of arguments for each process
     losses, accuracies = [], []
     ap_nodes=[]
     AP_states = list(ap_avg_state_dict.items())
 
-    pool = ThreadPoolExecutor(max_workers=10)
+    pool = ThreadPoolExecutor(max_workers=MAX_WORKERS)
     futures = {pool.submit(test_model, AP_state, testloaders, device): AP_state[0] for AP_state in AP_states}
 
     # Collect results as they complete
@@ -180,19 +182,6 @@ def update_ap_metrics(ap_avg_state_dict,model,testloaders,device):
         "losses": losses,
         "accuracies": accuracies
     }
-# def update_ap_metrics(ap_avg_state_dict,model,testloaders,device):
-#     losses,accuracies=[],[]
-#     for (AP, state_dict) in tqdm(ap_avg_state_dict.items(), desc='Testing clients'):
-#         model.load_state_dict(state_dict),
-#         loss, accuracy = test(model, testloaders[AP], device)
-#         losses.append(loss)
-#         accuracies.append(accuracy)
-#
-#     return {
-#         "ap_nodes":list(ap_avg_state_dict.keys()),
-#         "losses":losses,
-#         "accuracies":accuracies
-#     }
 
 ##################################
 # MISCELLANEOUS METHODS
@@ -220,5 +209,30 @@ def Euclidean(d1: Device, d2: Device):
         np.linalg.norm(np.array([d1.x, d1.y]) - np.array([d2.x, d2.y]))
     )
 
+def process_trainloaders(AP, trainloaders):
+    class_counter = Counter()
+    for trainloader in trainloaders:
+        labels = []
+        for _, batch_labels in trainloader:
+            labels.extend(batch_labels.tolist())
+        class_counter.update(labels)
+    return len(trainloaders), AP, dict(class_counter)
+
+def get_community_class_distributions(trainloaders, ap_member_map, MAX_WORKERS= 20):
+    community_datasets = defaultdict(list)
+    community_class_dist = {}
+    for AP, members in ap_member_map.items():
+        community_datasets[AP].extend([trainloaders[member] for member in members])
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = [pool.submit(process_trainloaders, AP, loaders) for AP, loaders in community_datasets.items()]
+        for future in tqdm(as_completed(futures), total=len(futures), desc='Community Distributions'):
+            num_clients, AP, class_counts = future.result()
+            community_class_dist[AP] = {
+                "num_clients": num_clients,
+                "Class_counts": class_counts
+            }
+
+    return community_class_dist
 
 

@@ -38,6 +38,32 @@ def batch_cosine_similarity(device_list):
 
     return cosine_sim_matrix
 
+def device_neighbor_similarity(model_params, neighbors, device_list):
+    """
+    Calculates a device's model to each of its neighboring node's model
+    :param model_params:
+    :param neighbors:
+    :param model_params:
+    :return: 1D tenosr
+    """
+    # Flatten and normalize the given model's parameters
+    d = "mps" if torch.backends.mps.is_available() else "cpu"
+    target_model_vector = torch.cat([param.flatten() for param in model_params.values()]).to(device=d)
+    target_model_vector /= torch.norm(target_model_vector)
+
+    # Prepare and normalize device models in a batch
+    device_model_matrix = torch.stack([
+        torch.cat([param.flatten() for param in device_list[nid].get_model().values()])
+        for nid in neighbors
+    ]).to(device=d)
+    device_model_matrix /= device_model_matrix.norm(dim=1, keepdim=True)
+
+    cosine_similarities = torch.matmul(device_model_matrix, target_model_vector)
+
+    similarity_dict = {nid: similarity.item() for nid, similarity in zip(neighbors, cosine_similarities)}
+
+    return similarity_dict
+
 #NOTE NEW Co-Sim Functions
 def compute_cosim_metric_from_state(state_dict1: dict, state_dict2: dict):
     cos = nn.CosineSimilarity(dim=0, eps=1e-6)
@@ -188,23 +214,23 @@ class ProximityPreferentialAttachment(Algorithm):
         return
 
 
-    def run_global_round_setup_steps(self, round=0):
+    def run_global_round_setup_steps(self, round=0, threshold=10):
 
         self.update_coordinates(round)
-        self.run_linking_algorithm(round_num=round)
+        self.run_linking_algorithm(round_num=round, threshold=10)
         return
 
     def run_local_aggregation_round(self,max_iterations=3):
         return super().run_local_aggregation_round()
 
 
-    def run_linking_algorithm(self,round_num=0,folder="static_updates/",save=False,weight="weight"):
+    def run_linking_algorithm(self,round_num=0,folder="static_updates/",save=False,weight="weight", threshold=10):
         """ Cases:
                 - Static Devices/Static Topology
                 - Static Device/Changing Topology
                 - Mobile Devices/Changing Topology
         """
-        self.run_proximity_preferential_attachment()
+        self.run_proximity_preferential_attachment(threshold=threshold)
         # self.run_spatial_weighted_attachment()
         self.NXG1=copy.deepcopy(self.NXG2)
         self.select_access_points_on_betweenness()
@@ -215,7 +241,8 @@ class ProximityPreferentialAttachment(Algorithm):
         # G1 is a placeholder with which to build G2
         # G2 is initialized either with some seed nodes or minspantree
         self.NXG2=self.init_with_minspantree()
-        self.build_proximity_graph(threshold)
+        #self.build_proximity_graph(threshold)
+        self.fast_build_proximity_graph_(threshold=threshold)
         G=self.NXG1
         G2=self.NXG2 #NOTE/TODO -- maybe start with a min span Tree here or use the seeding method
 
@@ -351,7 +378,7 @@ class CosineReassignment(Algorithm):
 
     def run_linking_algorithm(self,threshold=10):
         self.threshold=threshold
-        self.build_proximity_graph() # allow_isolates = False
+        self.build_proximity_graph(threshold=threshold) # allow_isolates = False
         self.select_access_points_on_betweenness() 
         self.make_derived_network()
         self.assign_communities()
@@ -409,7 +436,7 @@ class DPP(Algorithm):
         self.sf_seeds = max(2, int(0.07 * num_devices))  # Seed value used in ProximityPreferentialAttachment
         self.ap_param_stacks = {}  # Parameter stack used in CosineReassignment
 
-    def run_global_round_setup_steps(self, round=0):
+    def run_global_round_setup_steps(self, round=0, threshold=10):
 
         self.update_coordinates(round)
         self.run_linking_algorithm(round_num=round, threshold=self.threshold)
@@ -423,10 +450,10 @@ class DPP(Algorithm):
 
         self.run_spatial_weighted_attachment(threshold=threshold)  # Proximity part
         self.select_access_points_on_betweenness()
-        self.compare_communities()
+        #self.compare_communities()
         self.assign_communities()
 
-    def run_spatial_weighted_attachment(self, threshold=0.50, num_rounds=6):
+    def run_spatial_weighted_attachment(self, threshold=0.75, num_rounds=6):
         self.NXG2 = self.init_with_minspantree()
         self.fast_build_proximity_graph_(threshold)
         G = self.NXG1
@@ -436,10 +463,10 @@ class DPP(Algorithm):
             neighbors = list(G.neighbors(d.id))
             if not neighbors:
                 continue
-
+            cosine_sim = device_neighbor_similarity(d.get_model(), neighbors, self.device_list)
             # Calculate combined weights based on degree and spatial proximity
             combined_weights = [
-                G2.degree(nid) / (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
+                G2.degree(nid)*cosine_sim[nid]/ (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
                 for nid in neighbors
             ]
             combined_weights = np.array(combined_weights) / np.sum(combined_weights)
@@ -448,6 +475,14 @@ class DPP(Algorithm):
             for attach in random.choices(neighbors, weights=combined_weights, k=num_rounds):
                 self.NXG2.add_edge(d.id, attach,
                                    weight=self.Euclidean(self.device_list[d.id], self.device_list[attach]))
+
+    def init_with_minspantree(self):
+        A=np.ones([self.N,self.N])
+        np.fill_diagonal(A, 0)
+        temp=nx.from_numpy_array(A)
+        temp=self.populate_edge_weights(temp)
+        return nx.minimum_spanning_tree(
+            temp,weight="weight",algorithm="kruskal")
 
     def compare_communities(self, max_iters=10):
 

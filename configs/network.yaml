@@ -1,4 +1,4 @@
-algorithm: 'star' # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
+algorithm: 'DPP' # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
 save_figures: True
@@ -11,7 +11,7 @@ num_rounds: 2
 num_classes: 10
 input_len: 1 # CIFAR: 3  MNIST: 1
 num_clients: 99
-aggregation_rounds: 3 # defaults to 1 if algorithm is 'star'
+aggregation_rounds: 1 # defaults to 1 if algorithm is 'star'
 
 #####################
 # DATA PREPARE AND IID-ness
