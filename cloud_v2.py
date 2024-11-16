@@ -22,7 +22,6 @@ THRESHOLD=0.65
 
 
 
-@hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
 def cloud(cfg:DictConfig):
     ### Exp Setup Info
     omegaconf.OmegaConf.to_yaml(cfg)
@@ -183,11 +182,20 @@ def cloud(cfg:DictConfig):
         lgth=len(os.listdir(f"{metpath}/"))
         with open(f"{metpath}/run_{lgth}_{SUFFIX}.json", "w") as file:
             json.dump(DATA, file, indent=4)
-        with open(f"{metpath}/class_dist_{lgth}_{SUFFIX}.json", "w") as file:
+        os.makedirs(f"{metpath}/class_distributions", exist_ok=True)
+        with open(f"{metpath}/class_distributions/class_dist_{lgth}_{SUFFIX}.json", "w") as file:
             json.dump(CLASS_DIST, file, indent=4)
         print(f"Done.\nMetrics saved to {metpath}/run_{lgth}.json")
         print(f"Plots saved to {figpath}")
 
+@hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
+def run_models(cfg:DictConfig):
+    algorithms_to_run = cfg.chain_algorithms
+
+    for algorithm in algorithms_to_run:
+        cfg.algorithm = algorithm
+        cloud(cfg)
+
 
 if __name__ == "__main__":
-    cloud()
+    run_models()

@@ -14,9 +14,7 @@ from data_prepare import prepare_dataset
 from deprecate.models import Net
 import colorama
 
-
-# NOTE: Possibly delete this -- use structure in  "cloud_template.py" to be able to call every algorthm from single script
-
+#/TODO: deprecate this and move to new cloud_v2
 
 @hydra.main(config_path="configs", config_name="network", version_base=None)
 def cloud(cfg:DictConfig):

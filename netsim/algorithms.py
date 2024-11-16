@@ -100,9 +100,9 @@ class Algorithm(Network):
         self.update_coordinates(0)
         self.star = star
 
-    def run_global_round_setup_steps(self,round=0):
-        print("Implement in child classes")
-        print("Did Star flag work ", self.star)
+    def run_global_round_setup_steps(self,round=0, threshold=10):
+        #print("Implement in child classes")
+        #print("Did Star flag work ", self.star)
 
         #NOTE: i think generally just contains these 2 steps
         
