@@ -79,6 +79,8 @@ def cloud(cfg:DictConfig):
     cfg.figure_path = cfg.figure_path.format(algorithm=file_path)
     metpath=f"{cfg.metric_path}/{iid}/"
     figpath=f"{cfg.figure_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.figure_path}/{iid}/'))}/"
+    gephipath=f"{cfg.gephi_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.gephi_path}/{iid}/'))}/"
+    
     if not os.path.exists(metpath):
         os.mkdir(metpath)
     if not os.path.exists(figpath):
@@ -106,15 +108,35 @@ def cloud(cfg:DictConfig):
 
         start_time = time.time()
         for aggr_round in range(cfg.aggregation_rounds):
-            if SAVE_RESULTS:
-                os.makedirs(figpath, exist_ok=True)
-                NETWORK.plot_communities(spring=True)
-                plt.title(f"Round {server_round} Communities")
-                plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
-                #TODO: check on making GEPHI files
+
+            # TODO: DELETE / Moved this below because star doesn't really plot anything anyway
+            # if SAVE_RESULTS:
+            #     os.makedirs(figpath, exist_ok=True)
+            #     NETWORK.plot_communities(spring=True)
+            #     plt.title(f"Round {server_round} Communities")
+            #     plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
+            #     #TODO: check on making GEPHI files
+            
             if (cfg.algorithm != "star"):
                 NETWORK.calculate_ap_distribution_aggregation_cost()
                 NETWORK.calculate_ap_distribution_aggregation_cost() # 2x for agg and distribution
+                
+                if SAVE_RESULTS:
+                    os.makedirs(figpath, exist_ok=True)
+                    os.makedirs(gephipath, exist_ok=True)
+                    NETWORK.plot_communities(spring=False)
+                    plt.title(f"Round {server_round} Communities")
+                    plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
+
+                    # Ensure Communities Passed as Integers:
+                    for (n,members) in enumerate(NETWORK.ap_member_map.values()):
+                        for m in members:
+                            NETWORK.NXG2.nodes[m]['gephi_community'] = n
+                            NETWORK.NXG2.nodes[m]['lat'] = NETWORK.device_list[m].x
+                            NETWORK.NXG2.nodes[m]['lon'] = NETWORK.device_list[m].y
+                            NETWORK.NXG2.nodes[m]['is_ap'] = 1*(m in NETWORK.curr_apoints)
+                    nx.write_gexf(NETWORK.NXG2, gephipath+f"{server_round}_{aggr_round}_{SUFFIX}.gexf") #TODO: check on making GEPHI files
+            
             state_dict_map = {}
             print(f'aggr_round: {aggr_round}')
             if aggr_round == 0:
