@@ -1,6 +1,7 @@
 # from netsim.network import Network
 import time
 import warnings  # Suppress all warnings # NOTE: some complaints from torch and plotting stuff
+from os.path import exists
 
 import colorama
 import hydra
@@ -16,12 +17,24 @@ warnings.filterwarnings("ignore")
 #NOTE SETTINGS / Set algorithm here
 CONFIG_NAME= "network"  # "scalefree", "network", "star", "cosine"
 WORKERS=15
-THRESHOLD=10 # NOTE: does nothing -- threshold parameter is set at algorithm level
+THRESHOLD=0.5 # NOTE: does nothing -- threshold parameter is set at algorithm level
 
+
+def get_community_class_distribuitions(trainloaders, ap_member_map):
+    class_counter = Counter()
+    community_datasets = {int: []}
+    community_class_dist = {}
+    for AP, members in ap_member_map.items():
+        [community_datasets[AP].append(trainloaders[member]) for member in members]
+    for AP, trainloaders in community_datasets.items():
+        for trainloader in trainloaders:
+            for _, labels in trainloader:
+                class_counter.update(labels.tolist())
+        community_class_dist[AP] = dict(class_counter)
+    return community_class_dist
 
 @hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
 def cloud(cfg:DictConfig):
-    
     ### Exp Setup Info
     omegaconf.OmegaConf.to_yaml(cfg)
     cfg.config_data.num_partitions = cfg.num_clients
@@ -29,8 +42,9 @@ def cloud(cfg:DictConfig):
     SAVE_FIGURES = cfg.save_figures
     DATA,NETWORK={},None
     DATA["cloud"]={"losses":[],"accuracies":[], "Wall_Clock":[]}
+    CLASS_DIST = {}
 
-    SUFFIX = f"_TEST_{cfg.config_data.dataset}"
+    SUFFIX = f"{cfg.config_data.dataset}"
 
     ### Data Setup/Loading
     network_model = Net(cfg.num_classes, cfg.input_len)
@@ -51,9 +65,8 @@ def cloud(cfg:DictConfig):
         file_path = f'proxpref'
         NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     elif cfg.algorithm == "star":
-        cfg.aggregation_rounds = 1
         file_path = f'baselines/{cfg.algorithm}'
-        NETWORK=Baselines(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
+        NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD,perceptual_map=cfg.plot_colormap, star=True)
     elif cfg.algorithm == "DPP":
         file_path = f'DPP'
         NETWORK = DPP(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
@@ -70,6 +83,8 @@ def cloud(cfg:DictConfig):
         os.mkdir(metpath)
     if not os.path.exists(figpath):
         os.mkdir(figpath)
+    if cfg.algorithm != "star":
+        CLASS_DIST["Starting Communities"] = get_community_class_distribuitions(trainloaders, NETWORK.ap_member_map)
 
     ###NOTE: Run
     for server_round in range(cfg.num_rounds):
@@ -82,7 +97,7 @@ def cloud(cfg:DictConfig):
 
         # Distribution + Aggregation Cost
         if (cfg.algorithm == "star"):
-            print("hello world")
+            print("Star Costs TOO much")
             NETWORK.calculate_server_distribution_aggregation_cost(mode="star")
             NETWORK.calculate_server_distribution_aggregation_cost(mode="star") # 2x for agg and distribution
         else:
@@ -135,16 +150,19 @@ def cloud(cfg:DictConfig):
         g_loss, g_accuracy = test(network_model, testloader, device)
         DATA["cloud"]["losses"].append(g_loss)
         DATA["cloud"]["accuracies"].append(g_accuracy)
-        DATA["cloud"]["Wall_Clock"].append(start_time-end_time)
+        DATA["cloud"]["Wall_Clock"].append(end_time-start_time)
         print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy,"\n"+colorama.Style.RESET_ALL)
 
     DATA["total_run_cost"] = NETWORK.total_cost
+    if cfg.algorithm != "star":
+        CLASS_DIST["Ending_Communities"] = get_community_class_distribuitions(trainloaders, NETWORK.ap_member_map)
     print(f"{cfg.algorithm } cost ", NETWORK.total_cost)
     if SAVE_RESULTS:
         lgth=len(os.listdir(f"{metpath}/"))
         with open(f"{metpath}/run_{lgth}_{SUFFIX}.json", "w") as file:
             json.dump(DATA, file, indent=4)
-        
+        with open(f"{metpath}/class_dist_{lgth}_{SUFFIX}.json", "w") as file:
+            json.dump(CLASS_DIST, file, indent=4)
         print(f"Done.\nMetrics saved to {metpath}/run_{lgth}.json")
         print(f"Plots saved to {figpath}")
 

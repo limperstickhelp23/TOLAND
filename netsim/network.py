@@ -93,10 +93,6 @@ class Device:
     
     def get_community_model(self):
         return torch.load(self.community_model_path)
-
-    def compute_cosines():
-        #NOTE:  possibly could put this here
-        return
     
     def set_step_coordinates(self,step=0):
         #NOTE: update positions at every GLOBAL round

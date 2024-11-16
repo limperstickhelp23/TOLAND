@@ -270,29 +270,6 @@ class ProximityPreferentialAttachment(Algorithm):
         return nx.minimum_spanning_tree(
             temp,weight="weight",algorithm="kruskal")
 
-    def run_spatial_weighted_attachment(self, threshold=0.50, num_rounds=6):
-        self.NXG2 = self.init_with_minspantree()
-        self.fast_build_proximity_graph_(threshold)
-        G = self.NXG1
-        G2 = self.NXG2
-
-        for d in self.device_list:
-            neighbors = list(G.neighbors(d.id))
-            if not neighbors:
-                continue
-
-            # Calculate combined weights based on degree and spatial proximity
-            combined_weights = [
-                G2.degree(nid) / (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
-                for nid in neighbors
-            ]
-            combined_weights = np.array(combined_weights) / np.sum(combined_weights)
-
-            # Preferential attachment based on the combined metric
-            for attach in random.choices(neighbors, weights=combined_weights, k=num_rounds):
-                self.NXG2.add_edge(d.id, attach,
-                                   weight=self.Euclidean(self.device_list[d.id], self.device_list[attach]))
-
 
     def seeding_algorithm(self,num_seeds=5):
         # TODO: run seeding out of the other file without need for copying code
@@ -421,12 +398,12 @@ class CosineReassignment(Algorithm):
         return
 
 
-class DPP(ProximityPreferentialAttachment):
+class DPP(Algorithm):
     """
     Combines Proximity Preferential Attachment and Cosine Reassignment.
     """
 
-    def __init__(self, num_devices=25, num_classes=10, perceptual_map="turbo", threshold=10):
+    def __init__(self, num_devices=25, num_classes=10, perceptual_map="turbo", threshold=0.5):
         super().__init__(num_devices=num_devices, num_classes=num_classes, perceptual_map=perceptual_map,
                          threshold=threshold)
         self.sf_seeds = max(2, int(0.07 * num_devices))  # Seed value used in ProximityPreferentialAttachment
@@ -435,18 +412,42 @@ class DPP(ProximityPreferentialAttachment):
     def run_global_round_setup_steps(self, round=0):
 
         self.update_coordinates(round)
-        self.run_linking_algorithm(round_num=round)
+        self.run_linking_algorithm(round_num=round, threshold=self.threshold)
 
     def run_local_aggregation_round(self, max_iterations=3):
 
         self.compare_communities(max_iters=max_iterations)  # Cosine-based reassignment
         return super().run_local_aggregation_round()
 
-    def run_linking_algorithm(self, round_num=0, threshold=10):
+    def run_linking_algorithm(self, round_num=0, threshold=0.5):
 
-        self.run_spatial_weighted_attachment(threshold=0.7)  # Proximity part
+        self.run_spatial_weighted_attachment(threshold=threshold)  # Proximity part
         self.select_access_points_on_betweenness()
+        self.compare_communities()
         self.assign_communities()
+
+    def run_spatial_weighted_attachment(self, threshold=0.50, num_rounds=6):
+        self.NXG2 = self.init_with_minspantree()
+        self.fast_build_proximity_graph_(threshold)
+        G = self.NXG1
+        G2 = self.NXG2
+
+        for d in self.device_list:
+            neighbors = list(G.neighbors(d.id))
+            if not neighbors:
+                continue
+
+            # Calculate combined weights based on degree and spatial proximity
+            combined_weights = [
+                G2.degree(nid) / (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
+                for nid in neighbors
+            ]
+            combined_weights = np.array(combined_weights) / np.sum(combined_weights)
+
+            # Preferential attachment based on the combined metric
+            for attach in random.choices(neighbors, weights=combined_weights, k=num_rounds):
+                self.NXG2.add_edge(d.id, attach,
+                                   weight=self.Euclidean(self.device_list[d.id], self.device_list[attach]))
 
     def compare_communities(self, max_iters=10):
 
@@ -456,26 +457,34 @@ class DPP(ProximityPreferentialAttachment):
 
 
         # max_indices = torch.argmax(cosine_sim_matrix, dim=1)
+        changes = 1000
+        for iter in range(max_iters):
+            if changes < 2:
+                break
+            else:
+                changes = 0
+            for dobj in self.device_list:
 
-        for dobj in self.device_list:
+                dvc = dobj.id
+                if dvc in self.curr_apoints:  # APoints stay fixed
+                    continue
 
-            dvc = dobj.id
-            if dvc in self.curr_apoints:  # APoints stay fixed
-                continue
+                ## Similarity with "self" -- community model
+                max_cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[dvc])
+                max_nbr = dvc
 
-            ## Similarity with "self" -- community model
-            max_cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[dvc])
-            max_nbr = dvc
+                for nbr in self.NXG2.neighbors(dvc):
+                    # Similarity with its neighbor's community
+                    cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
+                    # Count Cost of Comparing
+                    self.total_cost += self.Euclidean(self.device_list[dvc], self.device_list[nbr])
+                    if cosim > max_cosim:
+                        max_cosim, max_nbr = cosim, nbr
+                self.device_list[dvc].parent_point = self.device_list[max_nbr].parent_point
+                self.device_list[dvc].color = self.device_list[max_nbr].color
 
-            for nbr in self.NXG2.neighbors(dvc):
-                # Similarity with its neighbor's community
-                cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
-                # Count Cost of Comparing
-                self.total_cost += self.Euclidean(self.device_list[dvc], self.device_list[nbr])
-                if cosim > max_cosim:
-                    max_cosim, max_nbr = cosim, nbr
-            self.device_list[dvc].parent_point = self.device_list[max_nbr].parent_point
-            self.device_list[dvc].color = self.device_list[max_nbr].color
+                if (max_nbr != dvc):
+                    changes += 1
 
         self.assign_communities()
 
