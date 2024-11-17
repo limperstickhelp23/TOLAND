@@ -1,9 +1,6 @@
 # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
 chain_algorithms: #run multiple algorithms in succession of order listed
   - DPP
-  - prox_preferential
-  - cosine
-algorithm: 'DPP' #No need to change this just change chain_algorithms
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
 save_figures: True

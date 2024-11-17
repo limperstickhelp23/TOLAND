@@ -15,16 +15,14 @@ from utils import *
 warnings.filterwarnings("ignore")
 
 #NOTE SETTINGS / Set algorithm here
-CONFIG_NAME= "network"  # "scalefree", "network", "star", "cosine"
 WORKERS=40
 THRESHOLD=0.65
 
 
 
 
-def cloud(cfg:DictConfig):
+def cloud(cfg:DictConfig, algorithm):
     ### Exp Setup Info
-    omegaconf.OmegaConf.to_yaml(cfg)
     cfg.config_data.num_partitions = cfg.num_clients
     SAVE_RESULTS = cfg.save_results
     SAVE_FIGURES = cfg.save_figures
@@ -42,20 +40,20 @@ def cloud(cfg:DictConfig):
 
     file_path = ''
     ###NOTE Select Algorithm
-    if cfg.algorithm == "scalefree":
-        file_path = f'baselines/{cfg.algorithm}'
+    if algorithm == "scalefree":
+        file_path = f'baselines/{algorithm}'
         NETWORK=ScaleFreeRewiring(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     
-    elif cfg.algorithm == "cosine":
+    elif algorithm == "cosine":
         file_path = f'cosine_assignment'
         NETWORK=CosineReassignment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
-    elif cfg.algorithm == "prox_preferential":
+    elif algorithm == "prox_preferential":
         file_path = f'proxpref'
         NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
-    elif cfg.algorithm == "star":
-        file_path = f'baselines/{cfg.algorithm}'
+    elif algorithm == "star":
+        file_path = f'baselines/{algorithm}'
         NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD,perceptual_map=cfg.plot_colormap, star=True)
-    elif cfg.algorithm == "DPP":
+    elif algorithm == "DPP":
         file_path = f'DPP'
         NETWORK = DPP(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
     else:
@@ -80,7 +78,7 @@ def cloud(cfg:DictConfig):
     if not os.path.exists(gephipath):
         os.mkdir(gephipath)
 
-    print(colorama.Fore.MAGENTA+ f'{cfg.algorithm} algorithm'+ colorama.Style.RESET_ALL)
+    print(colorama.Fore.MAGENTA+ f'{algorithm} algorithm'+ colorama.Style.RESET_ALL)
     ###NOTE: Run
     for server_round in range(cfg.num_rounds):
         if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.9345:
@@ -89,14 +87,14 @@ def cloud(cfg:DictConfig):
 
         NETWORK.run_global_round_setup_steps(server_round, threshold=THRESHOLD)
 
-        if server_round == 0 and cfg.algorithm != "star" and SAVE_FIGURES:
+        if server_round == 0 and algorithm != "star" and SAVE_FIGURES:
             CLASS_DIST["Starting Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
 
         DATA[server_round]={}
         ap_avg_state_dict = []
 
         # Distribution + Aggregation Cost
-        if (cfg.algorithm == "star"):
+        if (algorithm == "star"):
             print("Star Costs TOO much")
             NETWORK.calculate_server_distribution_aggregation_cost(mode="star")
             NETWORK.calculate_server_distribution_aggregation_cost(mode="star") # 2x for agg and distribution
@@ -115,7 +113,7 @@ def cloud(cfg:DictConfig):
             #     plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
             #     #TODO: check on making GEPHI files
             
-            if (cfg.algorithm != "star"):
+            if (algorithm != "star"):
                 NETWORK.calculate_ap_distribution_aggregation_cost()
                 NETWORK.calculate_ap_distribution_aggregation_cost() # 2x for agg and distribution
                 
@@ -159,7 +157,7 @@ def cloud(cfg:DictConfig):
 
             NETWORK.map_results_to_files(results)
             ap_avg_state_dict = NETWORK.run_local_aggregation_round()
-            if (cfg.algorithm == "star"):
+            if (algorithm == "star"):
                 break # No additional steps needed
             DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, Net(cfg.num_classes, cfg.input_len), validationloaders, device, MAX_WORKERS=WORKERS)
 
@@ -175,9 +173,9 @@ def cloud(cfg:DictConfig):
         print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy,"\n"+colorama.Style.RESET_ALL)
 
     DATA["total_run_cost"] = NETWORK.total_cost
-    if cfg.algorithm != "star" and SAVE_FIGURES:
+    if algorithm != "star" and SAVE_FIGURES:
         CLASS_DIST["Ending_Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
-    print(f"{cfg.algorithm } cost ", NETWORK.total_cost)
+    print(f"{algorithm } cost ", NETWORK.total_cost)
     #print(CLASS_DIST)
     if SAVE_RESULTS:
         lgth=len(os.listdir(f"{metpath}/"))
@@ -189,13 +187,13 @@ def cloud(cfg:DictConfig):
         print(f"Done.\nMetrics saved to {metpath}/run_{lgth}.json")
         print(f"Plots saved to {figpath}")
 
-@hydra.main(config_path="configs", config_name=CONFIG_NAME, version_base=None)
+@hydra.main(config_path="configs", config_name="network", version_base=None)
 def run_models(cfg:DictConfig):
+    omegaconf.OmegaConf.to_yaml(cfg)
     algorithms_to_run = cfg.chain_algorithms
 
     for algorithm in algorithms_to_run:
-        cfg.algorithm = algorithm
-        cloud(cfg)
+        cloud(cfg, algorithm)
 
 
 if __name__ == "__main__":

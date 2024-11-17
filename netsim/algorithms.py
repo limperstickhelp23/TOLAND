@@ -1,3 +1,5 @@
+from networkx import neighbors
+
 from netsim.network import *
 import os,random
 import numpy as np
@@ -40,7 +42,7 @@ def batch_cosine_similarity(device_list):
 
 def device_neighbor_similarity(model_params, neighbors, device_list):
     """
-    Calculates a device's model to each of its neighboring node's model
+    Calculates a device's model to each of its neighboring node's community model
     :param model_params:
     :param neighbors:
     :param model_params:
@@ -53,7 +55,7 @@ def device_neighbor_similarity(model_params, neighbors, device_list):
 
     # Prepare and normalize device models in a batch
     device_model_matrix = torch.stack([
-        torch.cat([param.flatten() for param in device_list[nid].get_model().values()])
+        torch.cat([param.flatten() for param in device_list[nid].get_community_model().values()])
         for nid in neighbors
     ]).to(device=d)
     device_model_matrix /= device_model_matrix.norm(dim=1, keepdim=True)
@@ -432,8 +434,11 @@ class DPP(Algorithm):
     def __init__(self, num_devices=25, num_classes=10, perceptual_map="turbo", threshold=0.5):
         super().__init__(num_devices=num_devices, num_classes=num_classes, perceptual_map=perceptual_map,
                          threshold=threshold)
+        self.NXG2 = nx.from_numpy_array(self.A)
         self.sf_seeds = max(2, int(0.07 * num_devices))  # Seed value used in ProximityPreferentialAttachment
         self.ap_param_stacks = {}  # Parameter stack used in CosineReassignment
+        self.cosim_matrix = [[None for _ in range(100)] for _ in range(100)]
+        self.num_apoints = 5
 
     def run_global_round_setup_steps(self, round=0, threshold=10):
 
@@ -446,34 +451,45 @@ class DPP(Algorithm):
         return super().run_local_aggregation_round()
 
     def run_linking_algorithm(self, round_num=0, threshold=0.5):
-
+        self.cosim_matrix = [[None for _ in range(100)] for _ in range(100)]
         self.run_spatial_weighted_attachment(threshold=threshold)  # Proximity part
         self.select_access_points_on_betweenness(switch=True)
-        self.compare_communities()
+        #self.compare_communities()
         self.assign_communities()
 
     def run_spatial_weighted_attachment(self, threshold=0.75, num_rounds=10):
-        self.NXG2 = self.init_with_minspantree()
-        self.fast_build_proximity_graph_(threshold)
-        G = self.NXG1
-        G2 = self.NXG2
-
+        #self.NXG2 = self.init_with_minspantree()
+        #self.fast_build_proximity_graph_(threshold)
+        #G = self.NXG1
+        G2 = nx.from_numpy_array(self.A)
         for d in self.device_list:
-            neighbors = list(G.neighbors(d.id))
+            #neighbors = list(G.neighbors(d.id))
+            neighbors = [dev.id for dev in self.device_list if dev is not d]
             if not neighbors:
                 continue
-            cosine_sim = device_neighbor_similarity(d.get_model(), neighbors, self.device_list)
+            #1D list of cosine similarity between d and each nid in neighbors in
+            reduced_nid_list = [nid for nid in neighbors if self.cosim_matrix[d.id][nid] is None]
+            #print(reduced_nid_list)
+            similarity_dict = {}
+            if len(reduced_nid_list) > 0:
+                similarity_dict = device_neighbor_similarity(d.get_model(), reduced_nid_list, self.device_list)
+            for nid, similarity in similarity_dict.items():
+                self.cosim_matrix[d.id][nid] = similarity
+                self.cosim_matrix[nid][d.id] = similarity
             # Calculate combined weights based on degree and spatial proximity
+            #/TODO: Check mult by cosim of model vs community model
             combined_weights = [
-                G2.degree(nid)/ (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
+                (max(G2.degree(nid),1)+5*self.cosim_matrix[d.id][nid])/ (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)
                 for nid in neighbors
             ]
-            combined_weights = np.array(combined_weights) / np.sum(combined_weights)
+            #combined_weights = np.array(combined_weights) / np.sum(combined_weights)
 
             # Preferential attachment based on the combined metric
             for attach in random.choices(neighbors, weights=combined_weights, k=num_rounds):
-                self.NXG2.add_edge(d.id, attach,
-                                   weight=self.Euclidean(self.device_list[d.id], self.device_list[attach]))
+                G2.add_edge(d.id, attach,
+                                   weight=self.Euclidean(self.device_list[d.id], self.device_list[attach])/(8+self.cosim_matrix[d.id][attach]))
+        self.NXG2 = G2
+
 
     def init_with_minspantree(self):
         A=np.ones([self.N,self.N])
@@ -509,7 +525,7 @@ class DPP(Algorithm):
 
                 for nbr in self.NXG2.neighbors(dvc):
                     # Similarity with its neighbor's community
-                    cosim = compute_model_to_community_cosim(self.device_list[dvc], self.device_list[nbr])
+                    cosim = self.cosim_matrix[dvc][nbr]
                     # Count Cost of Comparing
                     self.total_cost += self.Euclidean(self.device_list[dvc], self.device_list[nbr])
                     if cosim > max_cosim:
