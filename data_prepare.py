@@ -95,10 +95,10 @@ def prepare_dataset(cfg : DictConfig, val_ratio: float = 0.1):
         # construct data loaders and append to their respective list.
         # In this way, the i-th client will get the i-th element in the trainloaders list and the i-th element in the valloaders list
         trainloaders.append(
-            DataLoader(for_train, batch_size=batch_size, shuffle=True, num_workers=2)
+            DataLoader(for_train, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
         )
         valloaders.append(
-            DataLoader(for_val, batch_size=batch_size, shuffle=False, num_workers=2)
+            DataLoader(for_val, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True)
         )
 
     testloader = DataLoader(testset, batch_size=128)

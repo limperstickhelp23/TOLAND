@@ -36,12 +36,12 @@ from netsim.network import Device
 class Net(nn.Module):
     """A simple CNN suitable for simple vision tasks."""
 
-    def __init__(self, num_classes: int, input: int) -> None:
+    def __init__(self, num_classes: int, input_len: int) -> None:
         super(Net, self).__init__()
         self.channel_dim = 4
-        if input == 3:
+        if input_len == 3:
             self.channel_dim = 5
-        self.conv1 = nn.Conv2d(input, 6, 5)
+        self.conv1 = nn.Conv2d(input_len, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)
         self.fc1 = nn.Linear(16 * self.channel_dim**2, 120)
@@ -156,7 +156,7 @@ from tqdm import tqdm
 
 def test_model(AP_state, testloaders, device):
     AP, state_dict = AP_state
-    model = Net(10, 1)  # Replace with your model creation function
+    model = Net(10, 3)  # Replace with your model creation function
     model.load_state_dict(state_dict)
     loss, accuracy = test(model, testloaders[AP], device)
     return AP, loss, accuracy

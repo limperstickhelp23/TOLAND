@@ -442,7 +442,7 @@ class DPP(Algorithm):
 
     def run_local_aggregation_round(self, max_iterations=3):
 
-        self.compare_communities(max_iters=max_iterations)  # Cosine-based reassignment
+        #self.compare_communities(max_iters=max_iterations)  # Cosine-based reassignment
         return super().run_local_aggregation_round()
 
     def run_linking_algorithm(self, round_num=0, threshold=0.5):
@@ -462,7 +462,7 @@ class DPP(Algorithm):
             neighbors = list(G.neighbors(d.id))
             if not neighbors:
                 continue
-            #cosine_sim = device_neighbor_similarity(d.get_model(), neighbors, self.device_list)
+            cosine_sim = device_neighbor_similarity(d.get_model(), neighbors, self.device_list)
             # Calculate combined weights based on degree and spatial proximity
             combined_weights = [
                 G2.degree(nid)/ (self.Euclidean(self.device_list[d.id], self.device_list[nid]) + 1e-6)

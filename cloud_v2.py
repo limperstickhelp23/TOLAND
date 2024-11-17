@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore")
 
 #NOTE SETTINGS / Set algorithm here
 CONFIG_NAME= "network"  # "scalefree", "network", "star", "cosine"
-WORKERS=20
+WORKERS=40
 THRESHOLD=0.65
 
 
@@ -83,7 +83,7 @@ def cloud(cfg:DictConfig):
     print(colorama.Fore.MAGENTA+ f'{cfg.algorithm} algorithm'+ colorama.Style.RESET_ALL)
     ###NOTE: Run
     for server_round in range(cfg.num_rounds):
-        if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.945:
+        if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.9345:
             break
         print(colorama.Fore.LIGHTBLUE_EX + f'Starting server round {server_round+1}'+ colorama.Style.RESET_ALL)
 
@@ -151,6 +151,7 @@ def cloud(cfg:DictConfig):
                                    state_dict_map[i], cfg.config_fit, device) for i in range(cfg.num_clients)
             ]
             state_dict_map.clear()
+
             results= [
                 future.result() for future in tqdm(as_completed(futures), total=len(futures), desc="Training clients")
             ]
@@ -177,7 +178,7 @@ def cloud(cfg:DictConfig):
     if cfg.algorithm != "star" and SAVE_FIGURES:
         CLASS_DIST["Ending_Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
     print(f"{cfg.algorithm } cost ", NETWORK.total_cost)
-    print(CLASS_DIST)
+    #print(CLASS_DIST)
     if SAVE_RESULTS:
         lgth=len(os.listdir(f"{metpath}/"))
         with open(f"{metpath}/run_{lgth}_{SUFFIX}.json", "w") as file:
