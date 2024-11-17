@@ -159,7 +159,7 @@ def cloud(cfg:DictConfig, algorithm):
             ap_avg_state_dict = NETWORK.run_local_aggregation_round()
             if (algorithm == "star"):
                 break # No additional steps needed
-            DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, Net(cfg.num_classes, cfg.input_len), validationloaders, device, MAX_WORKERS=WORKERS)
+            DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, validationloaders, device, WORKERS, cfg.input_len)
 
         net_state_dict = aggregate_params(list(ap_avg_state_dict.values()))
 

@@ -154,21 +154,21 @@ def get_ap_metrics(ap_avg_state_dict, path, server_round, a, model, testloaders,
 from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
 from tqdm import tqdm
 
-def test_model(AP_state, testloaders, device):
+def test_model(AP_state, testloaders, device, input_len):
     AP, state_dict = AP_state
-    model = Net(10, 3)  # Replace with your model creation function
+    model = Net(10, input_len)  # Replace with your model creation function
     model.load_state_dict(state_dict)
     loss, accuracy = test(model, testloaders[AP], device)
     return AP, loss, accuracy
 
-def update_ap_metrics(ap_avg_state_dict,model,testloaders,device, MAX_WORKERS=20):
+def update_ap_metrics(ap_avg_state_dict,testloaders,device, MAX_WORKERS=20, input_len=3):
     # Prepare the list of arguments for each process
     losses, accuracies = [], []
     ap_nodes=[]
     AP_states = list(ap_avg_state_dict.items())
 
     pool = ThreadPoolExecutor(max_workers=MAX_WORKERS)
-    futures = {pool.submit(test_model, AP_state, testloaders, device): AP_state[0] for AP_state in AP_states}
+    futures = {pool.submit(test_model, AP_state, testloaders, device, input_len): AP_state[0] for AP_state in AP_states}
 
     # Collect results as they complete
     for future in tqdm(as_completed(futures), total=len(futures), desc='Testing clients'):

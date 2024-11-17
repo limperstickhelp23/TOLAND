@@ -454,7 +454,7 @@ class DPP(Algorithm):
         self.cosim_matrix = [[None for _ in range(100)] for _ in range(100)]
         self.run_spatial_weighted_attachment(threshold=threshold)  # Proximity part
         self.select_access_points_on_betweenness(switch=True)
-        #self.compare_communities()
+        #elf.compare_communities()
         self.assign_communities()
 
     def run_spatial_weighted_attachment(self, threshold=0.75, num_rounds=10):
