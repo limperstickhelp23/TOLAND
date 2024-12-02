@@ -8,6 +8,13 @@ import torch.nn as nn
 import random
 import copy
 from tqdm import tqdm
+from copy import deepcopy
+
+
+#NOTE : For distance based clustering
+from sklearn.cluster import KMeans
+from networkx.algorithms.community import greedy_modularity_communities, louvain_communities, kernighan_lin_bisection
+from sklearn.cluster import SpectralClustering
 
 #NOTE: Some UTILS
 def compute_cosim_metric(m1: nn.Parameter, m2: nn.Parameter):
@@ -446,7 +453,6 @@ class DPP(Algorithm):
         self.run_linking_algorithm(round_num=round, threshold=self.threshold)
 
     def run_local_aggregation_round(self, max_iterations=3):
-
         #self.compare_communities(max_iters=max_iterations)  # Cosine-based reassignment
         return super().run_local_aggregation_round()
 
@@ -490,7 +496,6 @@ class DPP(Algorithm):
                                    weight=self.Euclidean(self.device_list[d.id], self.device_list[attach])/(8+self.cosim_matrix[d.id][attach]))
         self.NXG2 = G2
 
-
     def init_with_minspantree(self):
         A=np.ones([self.N,self.N])
         np.fill_diagonal(A, 0)
@@ -498,6 +503,7 @@ class DPP(Algorithm):
         temp=self.populate_edge_weights(temp)
         return nx.minimum_spanning_tree(
             temp,weight="weight",algorithm="kruskal")
+    
 
     def compare_communities(self, max_iters=10):
 
@@ -539,76 +545,275 @@ class DPP(Algorithm):
         self.assign_communities()
 
 
+class ModularDPP(Algorithm):
+    """
+    IDEA: After Selecting AP's at the first hierarchy level (keep it at 5), we then look for even better sub-communities 
+    using modularity at the next level. 
 
+    START HERE
+    The edge weights are DPP (inspired) calculations with parameters λ1 and λ2. 
+    λ1 -- controls the degree at which to favor distance in weight
+    λ2 -- controls the degree at whcih to favor weight similarity
+    
+
+    LATER
+    Late but possible additions: 
+        * Infrequent similarity updates ("Color Memory Mechanism")
+            * Each device keeps a binary vector of last round's communtiy involvement
+            * Dot product will therefore either be 0 or 1 between neighbors
+        
+        * Alternatively:
+            * Weighted voting system either by (accuracies is possible)
+            * Or using communtiy vector which is occasionally updated (every 3 rounds or so)
+    
+    """
+
+
+    def __init__(self, num_devices=25, num_classes=10, perceptual_map="turbo", threshold=0.5):
+        super().__init__(num_devices=num_devices, num_classes=num_classes, perceptual_map=perceptual_map,threshold=threshold)
+        self.NXG2 = nx.from_numpy_array(self.A)
+        self.sf_seeds = max(2, int(0.07 * num_devices))  # Seed value used in ProximityPreferentialAttachment
+        self.ap_param_stacks = {}  # Parameter stack used in CosineReassignment
+        self.cosim_matrix = [[None for _ in range(100)] for _ in range(100)]
+        self.num_apoints = 5
+        self.clusters = None
+
+    def most_central_node_rule(self,sg):
+        """
+            Node with minimum sum of euclidean distance to its neighbors (in other words it minimizes a cluster cost)
+        """
+        best=np.argmin( np.sum(nx.to_numpy_array(sg),axis=1) )
+        self.curr_apoints.append(list(sg)[best])
+        self.ap_member_map[list(sg)[best]]=list(sg)
+        return
+
+    def run_global_round_setup_steps(self, round=0, threshold=10, plot=False):
+        
+        self.update_coordinates(round)
+        self.generate_distances() # NOTE: important to have access to distances at every round
+        self.run_linking_algorithm(round_num=round, threshold=self.threshold,plot=plot)
+        self.run_community_division_step(round_num=round,plot=plot)
+
+    def run_local_aggregation_round(self, max_iterations=3):
+        #self.compare_communities(max_iters=max_iterations)  # Cosine-based reassignment
+        return super().run_local_aggregation_round()
+
+    def run_linking_algorithm(self, round_num=0, threshold=0.5,plot=False):
+        """
+            NOTE:
+            See picture. I think running betweeness is inherently inefficient due to the clustered
+            layout of real world mobility. We want better spreading out of nodes. Either:
+
+            Idea 1: Run PPA + group nodes on hubs + closest paths 
+
+            Idea 2: Run modularity directly on the distance based graph  ( either K-means or Spectral seem to be good choices, or modularity + threshold)
+
+            #NOTE Init with MinSpanTree ( Not the Best Idea Perhaps ) --> See Screenshot as to Why
+            # G=nx.from_numpy_array(self.D)
+            # self.NXG1=nx.minimum_spanning_tree(G, weight="weight")
+            # self.select_access_points_on_betweenness(switch=False)
+        """
+
+        ## NOTE : Instead Try Using K-Means for Distance
+        kmeans = KMeans(n_clusters=self.num_apoints)
+        labels = kmeans.fit_predict(np.array(self.get_positions())) # data=np.array(self.get_positions())
+        
+        # NOTE: make adajacency from kmeans clusters
+        C=np.zeros([len(labels),self.N])
+        for lbl in labels:
+            C[lbl,:]=(np.array(labels) == lbl)*1
+        self.NXG1=nx.from_numpy_array( (C.T@C - np.eye(self.N))*self.D )
+    
+        #NOTE: MST way # self.NXG1=nx.minimum_spanning_tree(self.NXG1)    # clusters=list(nx.connected_components(self.NXG1))
+        self.ap_member_map,self.curr_apoints= {}, []
+        subgraphs=[self.NXG1.subgraph(cluster).copy() for cluster in list(nx.connected_components(self.NXG1))]
+        
+        for sg in subgraphs:
+            #NOTE: Use Distance Based Hub Selection
+            self.most_central_node_rule(sg)
+
+            #NOTE:  MST way works fine too
+            # hub,score=betweeness_rule(sg,top=1) 
+            # self.curr_apoints.append(hub[0])
+       
+        if (plot):
+            nx.draw(self.NXG1, with_labels=True,font_color="white",pos=self.get_positions(),width=0.2,node_size=1)
+            # nx.draw_networkx_nodes(self.NXG1,nodelist=self.curr_apoints,node_color="red",pos=self.get_positions())
+            for (ii,(k,v)) in enumerate(self.ap_member_map.items()):
+                cluster=list(v)
+                cluster.remove(k)
+                nx.draw_networkx_nodes(self.NXG1,nodelist=cluster,node_color=COLORS[ii],pos=self.get_positions())
+            nx.draw_networkx_nodes(self.NXG1,nodelist=self.curr_apoints,node_color="black",node_shape='*',node_size=800,pos=self.get_positions())
+            plt.draw()  # Redraw the figure with updated data
+            plt.pause(1.5)
+            plt.cla()
+    
+
+    def run_community_division_step(self,round_num=0,rate=1,cutoff=.8,seed_rounds=3,plot=True):   # True  False
+
+        def sigmoid(x,k):
+            return 1 / (1 + np.exp(-k* (x-seed_rounds)))
+
+        # NOTE Cosimilarity Schedule -- enforcing Convex combination is maybe too weak of a signal (??)
+        if round_num < seed_rounds:
+            λ1=0.0
+        else:
+            λ1=min(sigmoid(round_num,rate),cutoff)
+        λ2=(1-λ1)
+        print("Check Weight : " , λ1, λ2)
+
+
+        prior_map=deepcopy(self.ap_member_map)
+        self.ap_member_map={}
+
+        for (k,v) in prior_map.items():
+            nodes=list(v)
+            
+            #NOTE: edge-scoring algorithm based on DPP
+            subset=[self.device_list[node] for node in nodes]
+            S=batch_cosine_similarity(subset).cpu().numpy()      #NOTE: deal w/ inf values:  P=np.nan_to_num(P, nan=0, posinf=pmax, neginf=0) # Deal with Inf values
+            P=1/(self.D[np.ix_(nodes,nodes)]+1e-10) # add tiny epsilon to ensure bounded values
+            np.fill_diagonal(P,0.0),np.fill_diagonal(S,0.0) # NOTE: erase biasfrom self-node scores
+            print(np.sum(P))
+            
+            S/=np.sum(S)
+            P/=np.sum(P) #NOTE: Simple Step is to normalize matrices -- more complicated would be to convert to doubly-stochastic matrix)
+            print(np.sum(P))
+
+            A = λ1*S + λ2*P            
+            np.fill_diagonal(A,0.0)
+
+            """ NOTE:
+                -> Here we could either run some type of preferential attachment (but I think it's redundant).
+                -> Or instead, use the fully connected topology the AP runs a "DPP-inspired" modularity (Kern-Lin) division.
+            """
+
+            G = nx.from_numpy_array(A)
+            mapping = {i: nodes[i] for i in range(len(nodes))}
+            G = nx.relabel_nodes(G, mapping)
+            try:
+                #NOTE: For some edge case I haven't figured out yet -- this might fail -- I think the edge case is Singleton Node from K Means
+                partition = kernighan_lin_bisection(G,weight="weight")  #NOTE : might be preferable because it ensures 2 groups exactly
+            except:
+                partition=list(G)
+            
+            # partition = greedy_modularity_communities(G, weight='weight',resolution=1.0)  # NOTE: resolution is super sensitive (24 communtiies)
+            subgraphs=[self.NXG1.subgraph(cluster).copy() for cluster in partition]
+
+            for (n,sg) in enumerate(subgraphs):
+                self.most_central_node_rule(sg)  #NOTE: Use Distance Based Hub Selection for AP's
+            # print("Num Partitions: ", len(partition))
+        
+        #NOTE: Reset New Access Points (there are 5-10 now)
+        self.curr_apoints = list(self.ap_member_map.keys())
+        print(len(self.curr_apoints))
+
+        if (plot):
+            nx.draw(self.NXG1, with_labels=True,font_color="white",pos=self.get_positions(),width=0.2,node_size=1)
+            # nx.draw_networkx_nodes(self.NXG1,nodelist=self.curr_apoints,node_color="red",pos=self.get_positions())
+            for (ii,(k,v)) in enumerate(self.ap_member_map.items()):
+                cluster=list(v)
+                cluster.remove(k)
+                nx.draw_networkx_nodes(G,nodelist=cluster, node_color= COLORS[ii], pos=self.get_positions())
+            
+            # nx.draw(self.NXG1, with_labels=True,font_color="black",pos=self.get_positions())
+            nx.draw_networkx_nodes(G,nodelist=self.curr_apoints,node_color="black",node_shape='*',node_size=800,pos=self.get_positions())
+            plt.draw()  # Redraw the figure with updated data
+            plt.pause(1.5)
+            plt.cla()
+        
+
+            # NOTE: TODO -- for visualizing community structure
+            # self.NXG2
+
+            # NOTE: TODO  -- compute the cost of the modularity algorithm (at least just for communications)
+            # TODO: we will treat it as if it is an additional agg round basically
+
+            # possible TODO -- use a different cosim function (like DPP algorithm above)
+            
+
+    ## TODO : still need to see how this works in training loop
+
+
+
+
+
+
+
+
+
+
+
+##NOTE: MARK FOR SCRATCH  -- These are All Old Ideas
 #-------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------
 ###NOTE: Other Ideas | Can Ignore | Prototype New Ideas Etc. 
-class EfficientLessCentralizedServer(Algorithm):
-    def __init__(self,num_devices=20):
-        super().__init__(n=num_devices) 
-        self.mobile=False   
-        self.ap_color="black"
+# class EfficientLessCentralizedServer(Algorithm):
+#     def __init__(self,num_devices=20):
+#         super().__init__(n=num_devices) 
+#         self.mobile=False   
+#         self.ap_color="black"
     
-    def rewire_round(self,round_num=0):
-        indices=[i for i in range(self.N)]
-        clusters=random.sample([i for i in range(self.N)], self.num_apoints)
-        indices=list(set(indices)-set(clusters))
-        self.curr_apoints=list(clusters)
-        memberships={}
+#     def rewire_round(self,round_num=0):
+#         indices=[i for i in range(self.N)]
+#         clusters=random.sample([i for i in range(self.N)], self.num_apoints)
+#         indices=list(set(indices)-set(clusters))
+#         self.curr_apoints=list(clusters)
+#         memberships={}
 
-        for dvc in indices:
-            head=random.sample(clusters,1)[0]
-            memberships[dvc]=head
-            self.routes[dvc]=[dvc,head]
-            self.A[dvc,head]=self.A[head,dvc]=1
+#         for dvc in indices:
+#             head=random.sample(clusters,1)[0]
+#             memberships[dvc]=head
+#             self.routes[dvc]=[dvc,head]
+#             self.A[dvc,head]=self.A[head,dvc]=1
         
-        self.set_custom_topology(self.A)
-        self.reset_colors()
-        self.attribute_communities(memberships)
+#         self.set_custom_topology(self.A)
+#         self.reset_colors()
+#         self.attribute_communities(memberships)
 
-class MinSpanTreeServer(Algorithm):
-    def __init__(self,num_devices=20,λ=10):
-        super().__init__(n=num_devices,λ=λ)
-        self.mobile=True
-        self.weight="weight"
-        self.save=False
-        self.outdir="mst_tree_updates/"
-        self.method="fully_connected"
+# class MinSpanTreeServer(Algorithm):
+#     def __init__(self,num_devices=20,λ=10):
+#         super().__init__(n=num_devices,λ=λ)
+#         self.mobile=True
+#         self.weight="weight"
+#         self.save=False
+#         self.outdir="mst_tree_updates/"
+#         self.method="fully_connected"
     
-    def rewire_round(self,round_num=0):
+#     def rewire_round(self,round_num=0):
 
-        if self.method == "fully_connected":
-            A=np.ones([self.N,self.N])
-            np.fill_diagonal(A, 0)
-            self.set_custom_topology(A)
-        elif self.method == "proximity":
-            self.build_proximity_graph()
-            self.set_custom_topology(self.A)
-        else:
-            print("method not recognized")
-            return
+#         if self.method == "fully_connected":
+#             A=np.ones([self.N,self.N])
+#             np.fill_diagonal(A, 0)
+#             self.set_custom_topology(A)
+#         elif self.method == "proximity":
+#             self.build_proximity_graph()
+#             self.set_custom_topology(self.A)
+#         else:
+#             print("method not recognized")
+#             return
     
-        self.set_custom_topology(
-            nx.adjacency_matrix(
-                nx.minimum_spanning_tree(self.NXG1,weight=self.weight,algorithm="kruskal")
-            )
-        )
-        # self.generate_assignments(weight=self.weight)
-        self.attribute_communities()
-        # if (save):
-        #     self.assignments_to_yaml(os.path.join(folder,f"round_{round_num}.yaml"))
+#         self.set_custom_topology(
+#             nx.adjacency_matrix(
+#                 nx.minimum_spanning_tree(self.NXG1,weight=self.weight,algorithm="kruskal")
+#             )
+#         )
+#         # self.generate_assignments(weight=self.weight)
+#         self.attribute_communities()
+#         # if (save):
+#         #     self.assignments_to_yaml(os.path.join(folder,f"round_{round_num}.yaml"))
 
-class MaxEntropyServer(Algorithm):
-    def __init__(self,num_devices=20):
-        super().__init__(n=num_devices)   
+# class MaxEntropyServer(Algorithm):
+#     def __init__(self,num_devices=20):
+#         super().__init__(n=num_devices)   
 
-## NOTE: Add New Algorithms here
-class MyNewAlgorithm(Algorithm):
-    def __init__(self,num_devices=20):
-        super().__init__(n=num_devices)   
+# ## NOTE: Add New Algorithms here
+# class MyNewAlgorithm(Algorithm):
+#     def __init__(self,num_devices=20):
+#         super().__init__(n=num_devices)   
     
-    def rewire_round(self):
-        return
+#     def rewire_round(self):
+#         return
 
 
 

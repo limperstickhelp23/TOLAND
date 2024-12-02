@@ -226,17 +226,22 @@ class Network:
         self.A=A
         G=nx.from_numpy_array(A)
         self.NXG1=self.populate_edge_weights(G)
+    
+    def generate_distances(self):
+        coords = np.array([(device.x, device.y) for device in self.device_list])
+        self.D = np.linalg.norm(coords[:, np.newaxis] - coords, axis=2)
 
     def fast_build_proximity_graph_(self, threshold=10):
+        self.generate_distances()
         self.threshold = threshold
-        coords = np.array([(device.x, device.y) for device in self.device_list])
-        distances = np.linalg.norm(coords[:, np.newaxis] - coords, axis=2)
-        self.A = (distances < self.threshold).astype(int)
+        self.A = (self.D < self.threshold).astype(int) #-identity
         np.fill_diagonal(self.A, 0)
         self.NXG1 = self.populate_edge_weights(G=nx.from_numpy_array(self.A))
         return
 
     def build_proximity_graph(self,threshold=10):
+        """ NOTE: use version above ^^
+        """
         self.A=np.zeros([self.N,self.N])
         self.threshold=threshold
         for i in range(self.N):
@@ -244,7 +249,6 @@ class Network:
                 if self.Euclidean(self.device_list[i],self.device_list[j]) < self.threshold:
                     self.A[i,j]=self.A[j,i]=1
         self.NXG1=self.populate_edge_weights(G=nx.from_numpy_array(self.A))
-        # print(self.NXG1.edges())
         return
                 
     def attribute_communities(self, memberships: dict=None):
