@@ -1,25 +1,25 @@
 # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
 chain_algorithms: #run multiple algorithms in succession of order listed
-  - cosine
+  - DPP
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
-save_figures: True
+save_figures: False
 metric_path: "results/{algorithm}/metrics"
 figure_path: "results/{algorithm}/figures"
 gephi_path: "results/{algorithm}/gephis"
 
 
 num_rounds: 35
-num_classes: 10
-input_len: 1 # CIFAR: 3  MNIST: 1
 num_clients: 100
 aggregation_rounds: 2 # defaults to 1 if algorithm is 'star'
 
 #####################
 # DATA PREPARE AND IID-ness
 config_data:
-  dataset: 'MNIST' # **Change input_len** 'MNIST', 'CIFAR10'
-  alpha: 0.1 # control how much iid needed in the dataset, lower the more non-iid.
+  num_classes: 10
+  input_len: 3 # CIFAR: 3  MNIST: 1
+  dataset: 'CIFAR10' # **Change input_len** 'MNIST', 'CIFAR10'
+  alpha: 0.15 # control how much iid needed in the dataset, lower the more non-iid.
   batch_size: 20
   num_partitions: null #Gets the same value as num_clients (do not change)
   iid: 0 # bool 1:iid  0:non-iid
@@ -27,9 +27,12 @@ config_data:
 #####################
 # DEVICE PARAMETERS
 config_fit: # a config that each client will receive
+  num_classes: 10
   lr: 0.01 # learning rate to use by the clients
   momentum: 0.9 # momentum used by SGD optimiser on the client side
   epochs: 2 # number of training epochs each clients does in a fit() round
+  loss: 'fedprox' # 'fedavg', 'fedprox', 'fedmax'
+  beta: 0.5 # 0: fedAvg;  1, 10, 100, 1000..: fedMax; 0.001-2 fedProx;
 
 
 defaults:

@@ -460,7 +460,7 @@ class DPP(Algorithm):
         self.cosim_matrix = [[None for _ in range(100)] for _ in range(100)]
         self.run_spatial_weighted_attachment(threshold=threshold)  # Proximity part
         self.select_access_points_on_betweenness(switch=True)
-        #elf.compare_communities()
+        #self.compare_communities()
         self.assign_communities()
 
     def run_spatial_weighted_attachment(self, threshold=0.75, num_rounds=10):
@@ -493,7 +493,7 @@ class DPP(Algorithm):
             # Preferential attachment based on the combined metric
             for attach in random.choices(neighbors, weights=combined_weights, k=num_rounds):
                 G2.add_edge(d.id, attach,
-                                   weight=self.Euclidean(self.device_list[d.id], self.device_list[attach])/(8+self.cosim_matrix[d.id][attach]))
+                                   weight=self.Euclidean(self.device_list[d.id], self.device_list[attach])) #/(8+self.cosim_matrix[d.id][attach])
         self.NXG2 = G2
 
     def init_with_minspantree(self):

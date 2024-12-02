@@ -33,7 +33,9 @@ def cloud(cfg:DictConfig, algorithm):
     SUFFIX = f"{cfg.config_data.dataset}"
 
     ### Data Setup/Loading
-    network_model = Net(cfg.num_classes, cfg.input_len)
+    num_classes = cfg.config_data.num_classes
+    input_len = cfg.config_data.input_len
+    network_model = Net(num_classes, input_len)
     trainloaders, validationloaders, testloader = prepare_dataset(cfg=cfg.config_data)
     #check_iidness(trainloaders[0]),print(cfg.config_data.iid, cfg.config_data.alpha)
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -42,22 +44,22 @@ def cloud(cfg:DictConfig, algorithm):
     ###NOTE Select Algorithm
     if algorithm == "scalefree":
         file_path = f'baselines/{algorithm}'
-        NETWORK=ScaleFreeRewiring(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
+        NETWORK=ScaleFreeRewiring(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     
     elif algorithm == "cosine":
         file_path = f'cosine_assignment'
-        NETWORK=CosineReassignment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
+        NETWORK=CosineReassignment(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     elif algorithm == "prox_preferential":
         file_path = f'proxpref'
-        NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
+        NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     elif algorithm == "star":
         file_path = f'baselines/{algorithm}'
-        NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD,perceptual_map=cfg.plot_colormap, star=True)
+        NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=num_classes, threshold=THRESHOLD,perceptual_map=cfg.plot_colormap, star=True)
     elif algorithm == "DPP":
         file_path = f'DPP'
-        NETWORK = DPP(num_devices=cfg.num_clients,num_classes=cfg.num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
+        NETWORK = DPP(num_devices=cfg.num_clients,num_classes=num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
     else:
-        NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=cfg.num_classes,threshold=THRESHOLD) # Some Default Behavior
+        NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD) # Some Default Behavior
 
     #Directory setup
     iid="iid" if cfg.config_data.iid else "non_iid"
@@ -145,7 +147,7 @@ def cloud(cfg:DictConfig, algorithm):
 
             pool = ThreadPoolExecutor(max_workers=WORKERS)
             futures = [
-                pool.submit(local_train, i, Net(cfg.num_classes, cfg.input_len), trainloaders[i], validationloaders[i],
+                pool.submit(local_train, i, Net(num_classes, input_len), trainloaders[i], validationloaders[i],
                                    state_dict_map[i], cfg.config_fit, device) for i in range(cfg.num_clients)
             ]
             state_dict_map.clear()
@@ -159,7 +161,7 @@ def cloud(cfg:DictConfig, algorithm):
             ap_avg_state_dict = NETWORK.run_local_aggregation_round()
             if (algorithm == "star"):
                 break # No additional steps needed
-            DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, validationloaders, device, WORKERS, cfg.input_len)
+            DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, validationloaders, device, WORKERS, input_len)
 
         net_state_dict = aggregate_params(list(ap_avg_state_dict.values()))
 

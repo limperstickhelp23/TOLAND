@@ -1,3 +1,4 @@
+import copy
 import multiprocessing
 
 import networkx as nx
@@ -5,6 +6,7 @@ import torch
 import os
 from typing import List
 
+from scipy.stats import uniform
 from tqdm import tqdm
 
 from deprecate.client import test
@@ -41,9 +43,9 @@ class Net(nn.Module):
         self.channel_dim = 4
         if input_len == 3:
             self.channel_dim = 5
-        self.conv1 = nn.Conv2d(input_len, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.conv1 = nn.Conv2d(input_len, 6, 5) # 32x32 -> 28x28
+        self.pool = nn.MaxPool2d(2, 2) # 14x14
+        self.conv2 = nn.Conv2d(6, 16, 5) #10x10 -> pool -> 5x5
         self.fc1 = nn.Linear(16 * self.channel_dim**2, 120)
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, num_classes)
@@ -53,9 +55,17 @@ class Net(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(-1, 16 * self.channel_dim**2)
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+        x1 = F.relu(self.fc2(x))
+        x = self.fc3(x1)
+        return x, x1
+
+def cal_uniform_act(out):
+    zero_mat = torch.zeros(out.size()).to(out.device)
+    softmax = nn.Softmax(dim=1)
+    logsoftmax = nn.LogSoftmax(dim=1)
+
+    kldiv = nn.KLDivLoss(reduce=True)
+    return kldiv(logsoftmax(out), softmax(zero_mat))
 
 
 def local_train(cid, model, trainloader, valloder, parameters, cfg:DictConfig, device):
@@ -64,20 +74,38 @@ def local_train(cid, model, trainloader, valloder, parameters, cfg:DictConfig, d
         model.load_state_dict(parameters)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=cfg["lr"], momentum=cfg["momentum"])
-    train(model, device, trainloader, optimizer, cfg["epochs"])
+
+    train(model, device, trainloader, optimizer, cfg["epochs"], cfg.beta, cfg.loss)
     metrics = {}
     
     return [cid, model.state_dict(), metrics]
 
-def train(model, device, train_loader, optimizer, epochs):
+def train(model, device, train_loader, optimizer, epochs, beta=10, loss_type='fedavg'):
     criterion = torch.nn.CrossEntropyLoss()
     model.train()
     model.to(device)
+    w_glob = copy.deepcopy(model.state_dict())
+    l2_norm = nn.MSELoss()
+
     for _ in range(epochs):
         for images, labels in train_loader:
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
-            loss = criterion(model(images), labels)
+            output, a1 = model(images)
+            loss_ce = criterion(output, labels)
+
+            if loss_type == 'fedmax':
+                loss_kl = cal_uniform_act(a1)
+                loss = loss_ce + beta * loss_kl
+            elif loss_type == 'fedprox':
+                reg_loss=0
+                for name, param in model.named_parameters():
+                    reg_loss += l2_norm(param, w_glob[name])
+                loss = loss_ce + (beta/2) * reg_loss
+            else:
+                loss = loss_ce
+
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
@@ -93,7 +121,7 @@ def test(model, testloader, device):
     with torch.no_grad():
         for data in testloader:
             images, labels = data[0].to(device), data[1].to(device)
-            outputs = model(images)
+            outputs,_ = model(images)
             loss += criterion(outputs, labels).item()
             _, predicted = torch.max(outputs.data, 1)
             correct += (predicted == labels).sum().item()
