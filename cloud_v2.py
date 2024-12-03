@@ -20,7 +20,6 @@ THRESHOLD=0.65
 
 
 
-
 def cloud(cfg:DictConfig, algorithm):
     ### Exp Setup Info
     cfg.config_data.num_partitions = cfg.num_clients
@@ -58,6 +57,11 @@ def cloud(cfg:DictConfig, algorithm):
     elif algorithm == "DPP":
         file_path = f'DPP'
         NETWORK = DPP(num_devices=cfg.num_clients,num_classes=num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
+    
+    elif algorithm == "ModularDPP":
+        file_path = f'ModDPP'
+        NETWORK = ModularDPP(num_devices=cfg.num_clients,num_classes=num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
+
     else:
         NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD) # Some Default Behavior
 
@@ -122,9 +126,11 @@ def cloud(cfg:DictConfig, algorithm):
                 if SAVE_RESULTS:
                     os.makedirs(figpath, exist_ok=True)
                     os.makedirs(gephipath, exist_ok=True)
-                    NETWORK.plot_communities(spring=False)
-                    plt.title(f"Round {server_round} Communities")
-                    plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
+                    
+                    # if (cfg.save_figures):  # NOTE: not necessary because we can make plots from .gexf files
+                    #     NETWORK.plot_communities(spring=False)
+                    #     plt.title(f"Round {server_round} Communities")
+                    #     plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
 
                     # Ensure Communities Passed as Integers:
                     for (n,members) in enumerate(NETWORK.ap_member_map.values()):

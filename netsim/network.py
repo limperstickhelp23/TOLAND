@@ -16,8 +16,8 @@ import os
 
 # NOTE: manual color map | use built-ins from matplotlib
 COLORS = [
-    "red", "blue", "gold", "green", "lavender", "magenta", "orange", "grey", "firebrick", "brown",
-    "tab:blue", "darkgreen", "indigo", "black", "teal", "bisque", "mediumturquoise", "darkviolet",
+    "red", "blue", "gold", "green", "lavender", "magenta", "orange", "grey", "firebrick","teal",
+    "tab:blue", "darkgreen", "brown", "indigo", "black", "bisque", "mediumturquoise", "darkviolet",
     "aqua", "coral", "cyan", "hotpink", "lightgreen", "navy", "orchid", "slateblue", "tab:orange",
     "tab:green", "tab:red", "tab:purple", "tab:brown", "tab:pink", "tab:grey", "lightblue", "lime",
     "crimson", "maroon", "darkorange", "fuchsia", "turquoise", "salmon", "sienna", "tomato", "plum",
@@ -150,6 +150,11 @@ class Network:
     def Euclidean(self,d1:Device, d2:Device):
         return np.sqrt(
             np.linalg.norm( np.array([d1.x,d1.y]) - np.array([d2.x,d2.y]))
+        )
+    
+    def server_distance(self, d1:Device):
+        return np.sqrt(
+            np.linalg.norm( np.array([d1.x,d1.y]) - np.array([self.server.x,self.server.y]))
         )
 
     def update_coordinates(self,step):

@@ -110,10 +110,7 @@ class Algorithm(Network):
         self.star = star
 
     def run_global_round_setup_steps(self,round=0, threshold=10):
-        #print("Implement in child classes")
-        #print("Did Star flag work ", self.star)
-
-        #NOTE: i think generally just contains these 2 steps
+        #NOTE: Generally contains these 2 steps
         
         # Simulate Movements
         self.update_coordinates(round) # If movement enabled
@@ -577,42 +574,78 @@ class ModularDPP(Algorithm):
         self.cosim_matrix = [[None for _ in range(100)] for _ in range(100)]
         self.num_apoints = 5
         self.clusters = None
+        self.reset_cost_collections()
+        
+        import warnings
+        warnings.filterwarnings("ignore")    # NOTE: ignoring this torch warning keeps cluttering output
+    
+    def reset_cost_collections(self):
+        self.level_1_total_edge_cost=0
+        self.level_2_total_edge_cost=0
+        self.server_out_cost=0 # 5 access points
+        self.server_in_cost=0  # 10 access points
+    
+    def calculate_round_cost(self,num_communication_rounds):
+        round_cost = self.level_1_total_edge_cost + self.server_out_cost + self.server_in_cost + num_communication_rounds*self.level_2_total_edge_cost
+        self.total_cost += round_cost
+        return round_cost
 
     def most_central_node_rule(self,sg):
         """
             Node with minimum sum of euclidean distance to its neighbors (in other words it minimizes a cluster cost)
         """
-        best=np.argmin( np.sum(nx.to_numpy_array(sg),axis=1) )
-        self.curr_apoints.append(list(sg)[best])
-        self.ap_member_map[list(sg)[best]]=list(sg)
-        return
+        sg_costs=np.sum(nx.to_numpy_array(sg),axis=1)
+        nodes=list(sg)
+        ap=nodes[np.argmin(sg_costs)]
+        self.curr_apoints.append(ap)
+        self.ap_member_map[ap]=nodes
+  
+        k = 0
+        for n in nodes:
+            if n != ap:
+                k += self.D[ap,n]
+        
+        # print(sum(sg_costs))
+        # print(k ,"\n ")
+        
+        return np.min(sg_costs)
 
     def run_global_round_setup_steps(self, round=0, threshold=10, plot=False):
         
+        self.reset_cost_collections()
         self.update_coordinates(round)
         self.generate_distances() # NOTE: important to have access to distances at every round
         self.run_linking_algorithm(round_num=round, threshold=self.threshold,plot=plot)
-        self.run_community_division_step(round_num=round,plot=plot)
+        # self.run_community_division_step(round_num=round,plot=plot)
 
-    def run_local_aggregation_round(self, max_iterations=3):
+    def run_local_aggregation_round(self, num_communication_rounds=3):
         #self.compare_communities(max_iters=max_iterations)  # Cosine-based reassignment
+        self.calculate_round_cost(num_communication_rounds)
         return super().run_local_aggregation_round()
 
+    
     def run_linking_algorithm(self, round_num=0, threshold=0.5,plot=False):
-        """
-            NOTE:
-            See picture. I think running betweeness is inherently inefficient due to the clustered
+        """ NOTE: See picture. I think running betweeness is inherently inefficient due to the clustered
             layout of real world mobility. We want better spreading out of nodes. Either:
 
-            Idea 1: Run PPA + group nodes on hubs + closest paths 
-
-            Idea 2: Run modularity directly on the distance based graph  ( either K-means or Spectral seem to be good choices, or modularity + threshold)
+             - Idea 1: Run PPA + group nodes on hubs + closest paths
+             - Idea 2: Run modularity directly on the distance based graph  ( either K-means or Spectral seem to be good choices, or modularity + threshold)
 
             #NOTE Init with MinSpanTree ( Not the Best Idea Perhaps ) --> See Screenshot as to Why
-            # G=nx.from_numpy_array(self.D)
-            # self.NXG1=nx.minimum_spanning_tree(G, weight="weight")
-            # self.select_access_points_on_betweenness(switch=False)
+                # G=nx.from_numpy_array(self.D)
+                # self.NXG1=nx.minimum_spanning_tree(G, weight="weight")
+                # self.select_access_points_on_betweenness(switch=False)
         """
+
+        def plot_topology(G : nx.graph, pause=1.5, edge_weights=.2):
+            nx.draw(G, with_labels=True,font_color="white",pos=self.get_positions(),width=edge_weights,node_size=1)
+            for (ii,(k,v)) in enumerate(self.ap_member_map.items()):
+                cluster=list(v)
+                cluster.remove(k)
+                nx.draw_networkx_nodes(G,nodelist=cluster, node_color= COLORS[ii], pos=self.get_positions())   
+            nx.draw_networkx_nodes(G,nodelist=self.curr_apoints,node_color="black",node_shape='*',node_size=800,pos=self.get_positions())
+            plt.draw(),plt.pause(pause),plt.cla()
+
 
         ## NOTE : Instead Try Using K-Means for Distance
         kmeans = KMeans(n_clusters=self.num_apoints)
@@ -630,109 +663,103 @@ class ModularDPP(Algorithm):
         
         for sg in subgraphs:
             #NOTE: Use Distance Based Hub Selection
-            self.most_central_node_rule(sg)
-
-            #NOTE:  MST way works fine too
-            # hub,score=betweeness_rule(sg,top=1) 
-            # self.curr_apoints.append(hub[0])
+            mincost=self.most_central_node_rule(sg)
+            self.level_1_total_edge_cost += mincost #NOTE: cost required for AP to talk to its members (at first level) 
+            #NOTE:  MST way could work fine too  # hub,score=betweeness_rule(sg,top=1)  # self.curr_apoints.append(hub[0])
+        
+        self.server_out_costs=np.sum([self.server_distance(self.device_list[ii]) for ii in self.ap_member_map.keys()])
        
+        # for (k,v) in self.ap_member_map.items():
+        #     print(k, " ", v)
+
         if (plot):
-            nx.draw(self.NXG1, with_labels=True,font_color="white",pos=self.get_positions(),width=0.2,node_size=1)
-            # nx.draw_networkx_nodes(self.NXG1,nodelist=self.curr_apoints,node_color="red",pos=self.get_positions())
-            for (ii,(k,v)) in enumerate(self.ap_member_map.items()):
-                cluster=list(v)
-                cluster.remove(k)
-                nx.draw_networkx_nodes(self.NXG1,nodelist=cluster,node_color=COLORS[ii],pos=self.get_positions())
-            nx.draw_networkx_nodes(self.NXG1,nodelist=self.curr_apoints,node_color="black",node_shape='*',node_size=800,pos=self.get_positions())
-            plt.draw()  # Redraw the figure with updated data
-            plt.pause(1.5)
-            plt.cla()
+            plot_topology(self.NXG1)
     
-
-    def run_community_division_step(self,round_num=0,rate=1,cutoff=.8,seed_rounds=3,plot=True):   # True  False
-
-        def sigmoid(x,k):
-            return 1 / (1 + np.exp(-k* (x-seed_rounds)))
-
-        # NOTE Cosimilarity Schedule -- enforcing Convex combination is maybe too weak of a signal (??)
-        if round_num < seed_rounds:
-            λ1=0.0
-        else:
-            λ1=min(sigmoid(round_num,rate),cutoff)
-        λ2=(1-λ1)
-        print("Check Weight : " , λ1, λ2)
-
-
-        prior_map=deepcopy(self.ap_member_map)
-        self.ap_member_map={}
-
-        for (k,v) in prior_map.items():
-            nodes=list(v)
-            
-            #NOTE: edge-scoring algorithm based on DPP
-            subset=[self.device_list[node] for node in nodes]
-            S=batch_cosine_similarity(subset).cpu().numpy()      #NOTE: deal w/ inf values:  P=np.nan_to_num(P, nan=0, posinf=pmax, neginf=0) # Deal with Inf values
-            P=1/(self.D[np.ix_(nodes,nodes)]+1e-10) # add tiny epsilon to ensure bounded values
-            np.fill_diagonal(P,0.0),np.fill_diagonal(S,0.0) # NOTE: erase biasfrom self-node scores
-            print(np.sum(P))
-            
-            S/=np.sum(S)
-            P/=np.sum(P) #NOTE: Simple Step is to normalize matrices -- more complicated would be to convert to doubly-stochastic matrix)
-            print(np.sum(P))
-
-            A = λ1*S + λ2*P            
-            np.fill_diagonal(A,0.0)
-
-            """ NOTE:
-                -> Here we could either run some type of preferential attachment (but I think it's redundant).
-                -> Or instead, use the fully connected topology the AP runs a "DPP-inspired" modularity (Kern-Lin) division.
-            """
-
-            G = nx.from_numpy_array(A)
-            mapping = {i: nodes[i] for i in range(len(nodes))}
-            G = nx.relabel_nodes(G, mapping)
-            try:
-                #NOTE: For some edge case I haven't figured out yet -- this might fail -- I think the edge case is Singleton Node from K Means
-                partition = kernighan_lin_bisection(G,weight="weight")  #NOTE : might be preferable because it ensures 2 groups exactly
-            except:
-                partition=list(G)
-            
-            # partition = greedy_modularity_communities(G, weight='weight',resolution=1.0)  # NOTE: resolution is super sensitive (24 communtiies)
-            subgraphs=[self.NXG1.subgraph(cluster).copy() for cluster in partition]
-
-            for (n,sg) in enumerate(subgraphs):
-                self.most_central_node_rule(sg)  #NOTE: Use Distance Based Hub Selection for AP's
-            # print("Num Partitions: ", len(partition))
         
-        #NOTE: Reset New Access Points (there are 5-10 now)
-        self.curr_apoints = list(self.ap_member_map.keys())
-        print(len(self.curr_apoints))
+        ## NOTE: Second Step (Nested Definition) Divides Communities Into 2 Additional Sub-Communities
+        def run_community_division_step(round_num=0,rate=1,cutoff=.8,seed_rounds=3,plot=True,plot_func=plot_topology):   # True  False
 
-        if (plot):
-            nx.draw(self.NXG1, with_labels=True,font_color="white",pos=self.get_positions(),width=0.2,node_size=1)
-            # nx.draw_networkx_nodes(self.NXG1,nodelist=self.curr_apoints,node_color="red",pos=self.get_positions())
-            for (ii,(k,v)) in enumerate(self.ap_member_map.items()):
-                cluster=list(v)
-                cluster.remove(k)
-                nx.draw_networkx_nodes(G,nodelist=cluster, node_color= COLORS[ii], pos=self.get_positions())
+            def sigmoid(x,k):
+                return 1 / (1 + np.exp(-k* (x-seed_rounds)))
+
+            # NOTE Cosimilarity Schedule -- enforcing Convex combination is maybe too weak of a signal (??)
+            schedule=[0.1,0.1,0.1,0.2,0.333,0.5,0.6,0.67,0.7,0.8] # NOTE: manual schedule
+            if round_num < seed_rounds:
+                λ1=0.0
+            else:
+                λ1=min(sigmoid(round_num,rate),cutoff)
+            λ2=(1-λ1)
+            # print("Check Weight : " , λ1, λ2)
+
+            prior_map=deepcopy(self.ap_member_map)
+            self.ap_member_map={}
+
+            for (k,v) in prior_map.items():
+                nodes=list(v)
+                
+                #NOTE: edge-scoring algorithm based on DPP
+                subset=[self.device_list[node] for node in nodes]
+                S=batch_cosine_similarity(subset).cpu().numpy()      #NOTE: deal w/ inf values:  P=np.nan_to_num(P, nan=0, posinf=pmax, neginf=0) # Deal with Inf values
+                P=1/(self.D[np.ix_(nodes,nodes)]+1e-10) # add tiny epsilon to ensure bounded values
+                np.fill_diagonal(P,0.0),np.fill_diagonal(S,0.0) # NOTE: erase biasfrom self-node scores
+                S/=np.sum(S)
+                P/=np.sum(P) #NOTE: Simple Step is to normalize matrices -- more complicated would be to convert to doubly-stochastic matrix)
+    
+                A = λ1*S + λ2*P            
+                np.fill_diagonal(A,0.0)
+
+                """ NOTE:
+                    -> Here we could either run some type of preferential attachment (but I think it's redundant).
+                    -> Or instead, use the fully connected topology the AP runs a "DPP-inspired" modularity (Kern-Lin) division.
+                """
+                G=nx.Graph()
+                G = nx.from_numpy_array(A)
+                mapping = {i: nodes[i] for i in range(len(nodes))}
+                G = nx.relabel_nodes(G, mapping)
+                
+                try:
+                    #NOTE: For some edge case I haven't figured out yet -- this might fail -- I think the edge case is Singleton Node from K Means
+                    partition = kernighan_lin_bisection(G,weight="weight")  #NOTE : might be preferable because it ensures 2 groups exactly
+                except:
+                    partition=list(G)
+                
+                # partition = greedy_modularity_communities(G, weight='weight',resolution=1.0)  # NOTE: resolution is super sensitive (24 communtiies)
+                subgraphs=[G.subgraph(cluster).copy() for cluster in partition]
+
+                for (n,sg) in enumerate(subgraphs):
+                    _=self.most_central_node_rule(sg)  #NOTE: Use Distance Based Hub Selection for AP's
+                
+                self.server_in_cost=np.sum([self.server_distance(self.device_list[ii]) for ii in self.ap_member_map.keys()])
+
+            self.curr_apoints = list(self.ap_member_map.keys()) #NOTE: Reset New Access Points (there are 5-10 now)
+
+            ## NOTE: Build NXG2 which represents the final topology after all divisive steps
             
-            # nx.draw(self.NXG1, with_labels=True,font_color="black",pos=self.get_positions())
-            nx.draw_networkx_nodes(G,nodelist=self.curr_apoints,node_color="black",node_shape='*',node_size=800,pos=self.get_positions())
-            plt.draw()  # Redraw the figure with updated data
-            plt.pause(1.5)
-            plt.cla()
-        
+            self.NXG2 = nx.Graph()
+            self.NXG2.add_nodes_from([ii for ii in range(self.N)])
+            for (k,v) in self.ap_member_map.items(): 
+                for n in v:
+                    if n != k:
+                        self.NXG2.add_edge(k,n, weight=self.D[k,n])
 
+            if (plot):
+                plot_func(self.NXG1)
+                plot_func(self.NXG2, pause=1 , edge_weights=.2)
+            
+            
+            # Possible TODO's?
             # NOTE: TODO -- for visualizing community structure
-            # self.NXG2
-
             # NOTE: TODO  -- compute the cost of the modularity algorithm (at least just for communications)
             # TODO: we will treat it as if it is an additional agg round basically
-
             # possible TODO -- use a different cosim function (like DPP algorithm above)
-            
+        
+            # Extract all edge weights as a list
+            weights = [data['weight'] for _, _, data in self.NXG2.edges(data=True)]
 
-    ## TODO : still need to see how this works in training loop
+            # Sum the weights
+            self.level_2_total_edge_cost = sum(weights)
+
+        run_community_division_step(round_num=round_num,plot=plot)
 
 
 

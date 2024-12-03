@@ -3,9 +3,9 @@ from netsim.algorithms import ModularDPP
 
 # TODO : Still need to see how this works in training loop
 def modular_dpp_unit_test():
-    Net=ModularDPP(50,5)
-    for round in range(10):
-        Net.run_global_round_setup_steps(round,plot=True)
+    Net=ModularDPP(80,5)
+    for round in range(5):
+        Net.run_global_round_setup_steps(round,plot=False)
 
 
     # NOTE: test rate parameter
