@@ -57,7 +57,7 @@ def cloud(cfg:DictConfig, algorithm):
     elif algorithm == "DPP":
         file_path = f'DPP'
         NETWORK = DPP(num_devices=cfg.num_clients,num_classes=num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
-    
+
     elif algorithm == "ModularDPP":
         file_path = f'ModDPP'
         NETWORK = ModularDPP(num_devices=cfg.num_clients,num_classes=num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
@@ -72,6 +72,8 @@ def cloud(cfg:DictConfig, algorithm):
     cfg.gephi_path = cfg.gephi_path.format(algorithm=file_path)
 
     os.makedirs(f"{cfg.gephi_path}/{iid}/", exist_ok=True)
+    os.makedirs(f"{cfg.metric_path}/{iid}/", exist_ok=True)
+    os.makedirs(f"{cfg.figure_path}/{iid}/", exist_ok=True)
 
     metpath=f"{cfg.metric_path}/{iid}/"
     figpath=f"{cfg.figure_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.figure_path}/{iid}/'))}/"
@@ -126,7 +128,7 @@ def cloud(cfg:DictConfig, algorithm):
                 if SAVE_RESULTS:
                     os.makedirs(figpath, exist_ok=True)
                     os.makedirs(gephipath, exist_ok=True)
-                    
+
                     # if (cfg.save_figures):  # NOTE: not necessary because we can make plots from .gexf files
                     #     NETWORK.plot_communities(spring=False)
                     #     plt.title(f"Round {server_round} Communities")

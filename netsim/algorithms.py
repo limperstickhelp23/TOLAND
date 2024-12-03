@@ -462,12 +462,12 @@ class DPP(Algorithm):
 
     def run_spatial_weighted_attachment(self, threshold=0.75, num_rounds=10):
         #self.NXG2 = self.init_with_minspantree()
-        #self.fast_build_proximity_graph_(threshold)
+        self.fast_build_proximity_graph_(threshold)
         #G = self.NXG1
         G2 = nx.from_numpy_array(self.A)
         for d in self.device_list:
             #neighbors = list(G.neighbors(d.id))
-            neighbors = [dev.id for dev in self.device_list if dev is not d]
+            neighbors = list(self.NXG1.neighbors(d.id)) #[dev.id for dev in self.device_list if dev is not d]
             if not neighbors:
                 continue
             #1D list of cosine similarity between d and each nid in neighbors in

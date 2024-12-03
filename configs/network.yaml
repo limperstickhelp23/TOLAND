@@ -1,4 +1,4 @@
-# star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref)
+# star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref), ModDPP
 chain_algorithms: #run multiple algorithms in succession of order listed
   - ModularDPP
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
@@ -9,7 +9,7 @@ figure_path: "results/{algorithm}/figures"
 gephi_path: "results/{algorithm}/gephis"
 
 
-num_rounds: 35  #35
+num_rounds: 35
 num_clients: 100
 aggregation_rounds: 2 # defaults to 1 if algorithm is 'star'
 
@@ -18,7 +18,7 @@ aggregation_rounds: 2 # defaults to 1 if algorithm is 'star'
 config_data:
   num_classes: 10
   input_len: 3 # CIFAR: 3  MNIST: 1
-  dataset: 'MNIST' # **Change input_len** 'MNIST', 'CIFAR10'
+  dataset: 'CIFAR10' # **Change input_len** 'MNIST', 'CIFAR10'
   alpha: 0.15 # control how much iid needed in the dataset, lower the more non-iid.
   batch_size: 20
   num_partitions: null #Gets the same value as num_clients (do not change)
@@ -31,8 +31,8 @@ config_fit: # a config that each client will receive
   lr: 0.01 # learning rate to use by the clients
   momentum: 0.9 # momentum used by SGD optimiser on the client side
   epochs: 2 # number of training epochs each clients does in a fit() round
-  loss: 'fedprox' # 'fedavg', 'fedprox', 'fedmax'
-  beta: 0.5 # 0: fedAvg;  1, 10, 100, 1000..: fedMax; 0.001-2 fedProx;
+  loss: 'fedmax' # 'fedavg', 'fedprox', 'fedmax'
+  beta: 100 # 0: fedAvg;  1, 10, 100, 1000..: fedMax; 0.001-2 fedProx;
 
 
 defaults:
