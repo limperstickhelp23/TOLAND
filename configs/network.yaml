@@ -1,6 +1,6 @@
 # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref), ModDPP
 chain_algorithms: #run multiple algorithms in succession of order listed
-  - ModularDPP
+  - star
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
 save_figures: False
