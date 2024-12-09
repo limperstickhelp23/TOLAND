@@ -26,8 +26,10 @@ def cloud(cfg:DictConfig, algorithm):
     SAVE_RESULTS = cfg.save_results
     SAVE_FIGURES = cfg.save_figures
     DATA,NETWORK={},None
+    DATA["algorithm"] = f'{algorithm} ({cfg.config_fit.loss}|{cfg.config_fit.optimizer})'
     DATA["cloud"]={"losses":[],"accuracies":[], "Wall_Clock":[]}
     CLASS_DIST = {}
+
 
     SUFFIX = f"{cfg.config_data.dataset}"
 
@@ -85,13 +87,15 @@ def cloud(cfg:DictConfig, algorithm):
         os.mkdir(figpath)
     if not os.path.exists(gephipath):
         os.mkdir(gephipath)
+    RUN_LENGTH = len(os.listdir(f"{metpath}/"))
 
-    print(colorama.Fore.MAGENTA+ f'{algorithm} algorithm'+ colorama.Style.RESET_ALL)
+    print(colorama.Fore.MAGENTA+ f'{algorithm} algorithm ({cfg.config_fit.loss}|{cfg.config_fit.optimizer})'+ colorama.Style.RESET_ALL)
     ###NOTE: Run
+
     for server_round in range(cfg.num_rounds):
         if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.9345:
             break
-        print(colorama.Fore.LIGHTBLUE_EX + f'Starting server round {server_round+1}'+ colorama.Style.RESET_ALL)
+        print(colorama.Fore.BLUE + f'Starting server round {server_round+1}'+ colorama.Style.RESET_ALL)
 
         NETWORK.run_global_round_setup_steps(server_round, threshold=THRESHOLD)
 
@@ -112,14 +116,6 @@ def cloud(cfg:DictConfig, algorithm):
 
         start_time = time.time()
         for aggr_round in range(cfg.aggregation_rounds):
-
-            # TODO: DELETE / Moved this below because star doesn't really plot anything anyway
-            # if SAVE_RESULTS:
-            #     os.makedirs(figpath, exist_ok=True)
-            #     NETWORK.plot_communities(spring=True)
-            #     plt.title(f"Round {server_round} Communities")
-            #     plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
-            #     #TODO: check on making GEPHI files
             
             if (algorithm != "star"):
                 NETWORK.calculate_ap_distribution_aggregation_cost()
@@ -128,11 +124,6 @@ def cloud(cfg:DictConfig, algorithm):
                 if SAVE_RESULTS:
                     os.makedirs(figpath, exist_ok=True)
                     os.makedirs(gephipath, exist_ok=True)
-
-                    # if (cfg.save_figures):  # NOTE: not necessary because we can make plots from .gexf files
-                    #     NETWORK.plot_communities(spring=False)
-                    #     plt.title(f"Round {server_round} Communities")
-                    #     plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
 
                     # Ensure Communities Passed as Integers:
                     for (n,members) in enumerate(NETWORK.ap_member_map.values()):
@@ -180,6 +171,9 @@ def cloud(cfg:DictConfig, algorithm):
         DATA["cloud"]["losses"].append(g_loss)
         DATA["cloud"]["accuracies"].append(g_accuracy)
         DATA["cloud"]["Wall_Clock"].append(end_time-start_time)
+        if SAVE_RESULTS:
+            with open(f"{metpath}/run_{RUN_LENGTH}_{SUFFIX}.json", "w") as file:
+                json.dump(DATA, file, indent=4)
         print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy,"\n"+colorama.Style.RESET_ALL)
 
     DATA["total_run_cost"] = NETWORK.total_cost
@@ -188,13 +182,12 @@ def cloud(cfg:DictConfig, algorithm):
     print(f"{algorithm } cost ", NETWORK.total_cost)
     #print(CLASS_DIST)
     if SAVE_RESULTS:
-        lgth=len(os.listdir(f"{metpath}/"))
-        with open(f"{metpath}/run_{lgth}_{SUFFIX}.json", "w") as file:
+        with open(f"{metpath}/run_{RUN_LENGTH}_{SUFFIX}.json", "w") as file:
             json.dump(DATA, file, indent=4)
         os.makedirs(f"{metpath}/class_distributions", exist_ok=True)
-        with open(f"{metpath}/class_distributions/class_dist_{lgth}_{SUFFIX}.json", "w") as file:
+        with open(f"{metpath}/class_distributions/class_dist_{RUN_LENGTH}_{SUFFIX}.json", "w") as file:
             json.dump(CLASS_DIST, file, indent=4)
-        print(f"Done.\nMetrics saved to {metpath}/run_{lgth}.json")
+        print(f"Done.\nMetrics saved to {metpath}/run_{RUN_LENGTH}.json")
         print(f"Plots saved to {figpath}")
 
 @hydra.main(config_path="configs", config_name="network", version_base=None)

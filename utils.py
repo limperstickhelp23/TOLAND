@@ -72,8 +72,10 @@ def local_train(cid, model, trainloader, valloder, parameters, cfg:DictConfig, d
 
     if parameters is not None:
         model.load_state_dict(parameters)
-
-    optimizer = torch.optim.SGD(model.parameters(), lr=cfg["lr"], momentum=cfg["momentum"])
+    if cfg.optimizer == 'SGD':
+        optimizer = torch.optim.SGD(model.parameters(), lr=cfg["lr"], momentum=cfg["momentum"])
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
 
     train(model, device, trainloader, optimizer, cfg["epochs"], cfg.beta, cfg.loss)
     metrics = {}
@@ -105,7 +107,6 @@ def train(model, device, train_loader, optimizer, epochs, beta=10, loss_type='fe
             else:
                 loss = loss_ce
 
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
