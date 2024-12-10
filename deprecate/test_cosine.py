@@ -8,7 +8,7 @@ from tqdm import tqdm
 from deprecate.client import local_train
 from data_prepare import prepare_dataset
 from deprecate.models import Net
-from netsim.algorithms import *
+from netsim.milestone2 import *
 from utils import *
 
 #SETTINGS

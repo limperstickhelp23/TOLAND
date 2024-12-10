@@ -1,4 +1,4 @@
-from netsim.algorithms import *
+from netsim.milestone2 import *
 from utils import *
 
 import os

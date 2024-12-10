@@ -27,6 +27,19 @@ Some Sample Results So Far (with MNIST)
     `python results/plotter.py results/proxpref/metrics/iid/run_0__TEST.json`
 
 
+## Dec 9th Run Notes:
+
+COLLECT for Cost Metrics
+- DPP: RUN 3
+- STAR: 
+- COSINE: 
+- PPA: 
+- MOD-DPP(?)
+
+
+
+
+
 
 ## Changes:
 

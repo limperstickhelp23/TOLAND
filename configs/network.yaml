@@ -1,24 +1,30 @@
 # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref), ModDPP
 chain_algorithms: #run multiple algorithms in succession of order listed
-  - star
+  # - Star
+  # - DPP
+  # - PPA
+  # - Cosine
+  - ModularDPP
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
 save_figures: False
-metric_path: "results/{algorithm}/metrics"
-figure_path: "results/{algorithm}/figures"
-gephi_path: "results/{algorithm}/gephis"
+# metric_path: "results/{algorithm}/metrics"
+# figure_path: "results/{algorithm}/figures"
+# gephi_path: "results/{algorithm}/gephis"
+
+base_path: "results/{algorithm}/{dataset}_{iidness}"
 
 
-num_rounds: 35
-num_clients: 100
+num_rounds: 1   #35 
+num_clients: 10  #100
 aggregation_rounds: 2 # defaults to 1 if algorithm is 'star'
 
 #####################
 # DATA PREPARE AND IID-ness
 config_data:
   num_classes: 10
-  input_len: 3 # CIFAR: 3  MNIST: 1
-  dataset: 'CIFAR10' # **Change input_len** 'MNIST', 'CIFAR10'
+  input_len: 1 # CIFAR: 3  MNIST: 1
+  dataset: 'MNIST' # **Change input_len** 'MNIST', 'CIFAR10'
   alpha: 0.15 # control how much iid needed in the dataset, lower the more non-iid.
   batch_size: 20
   num_partitions: null #Gets the same value as num_clients (do not change)

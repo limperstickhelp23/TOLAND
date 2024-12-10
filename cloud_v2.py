@@ -9,26 +9,25 @@ import omegaconf
 
 import matplotlib.pyplot as plt
 from data_prepare import *
-from netsim.algorithms import *
+# from netsim.milestone2 import *
+from netsim import *
 from utils import *
 
 warnings.filterwarnings("ignore")
 
-#NOTE SETTINGS / Set algorithm here
+#NOTE: Some Additional Settings 
 WORKERS=40
 THRESHOLD=0.65
 
 
-
 def cloud(cfg:DictConfig, algorithm):
+    
     ### Exp Setup Info
     cfg.config_data.num_partitions = cfg.num_clients
-    SAVE_RESULTS = cfg.save_results
-    SAVE_FIGURES = cfg.save_figures
+    cfg.save_figures = cfg.save_figures
     DATA,NETWORK={},None
-    DATA["cloud"]={"losses":[],"accuracies":[], "Wall_Clock":[]}
+    DATA["cloud"]={"losses":[],"accuracies":[], "Wall_Clock":[], "server_round_costs": []}
     CLASS_DIST = {}
-
     SUFFIX = f"{cfg.config_data.dataset}"
 
     ### Data Setup/Loading
@@ -38,22 +37,25 @@ def cloud(cfg:DictConfig, algorithm):
     trainloaders, validationloaders, testloader = prepare_dataset(cfg=cfg.config_data)
     #check_iidness(trainloaders[0]),print(cfg.config_data.iid, cfg.config_data.alpha)
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-
     file_path = ''
-    ###NOTE Select Algorithm
+    
+    ## NOTE: Select Algorithm ########
     if algorithm == "scalefree":
         file_path = f'baselines/{algorithm}'
         NETWORK=ScaleFreeRewiring(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
     
-    elif algorithm == "cosine":
-        file_path = f'cosine_assignment'
+    elif algorithm == "Cosine":
+        file_path = f'Cosine'
         NETWORK=CosineReassignment(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
-    elif algorithm == "prox_preferential":
-        file_path = f'proxpref'
+
+    elif algorithm == "PPA":
+        file_path = f'PPA'
         NETWORK=ProximityPreferentialAttachment(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD,perceptual_map=cfg.plot_colormap)
-    elif algorithm == "star":
+
+    elif algorithm == "Star":
         file_path = f'baselines/{algorithm}'
         NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=num_classes, threshold=THRESHOLD,perceptual_map=cfg.plot_colormap, star=True)
+
     elif algorithm == "DPP":
         file_path = f'DPP'
         NETWORK = DPP(num_devices=cfg.num_clients,num_classes=num_classes, threshold=THRESHOLD, perceptual_map=cfg.plot_colormap)
@@ -65,29 +67,20 @@ def cloud(cfg:DictConfig, algorithm):
     else:
         NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD) # Some Default Behavior
 
-    #Directory setup
-    iid="iid" if cfg.config_data.iid else "non_iid"
-    cfg.metric_path = cfg.metric_path.format(algorithm=file_path)
-    cfg.figure_path = cfg.figure_path.format(algorithm=file_path)
-    cfg.gephi_path = cfg.gephi_path.format(algorithm=file_path)
-
-    os.makedirs(f"{cfg.gephi_path}/{iid}/", exist_ok=True)
-    os.makedirs(f"{cfg.metric_path}/{iid}/", exist_ok=True)
-    os.makedirs(f"{cfg.figure_path}/{iid}/", exist_ok=True)
-
-    metpath=f"{cfg.metric_path}/{iid}/"
-    figpath=f"{cfg.figure_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.figure_path}/{iid}/'))}/"
-    gephipath=f"{cfg.gephi_path}/{iid}/"+f"run_{len(os.listdir(f'{cfg.gephi_path}/{iid}/'))}/"
+    ## Set Up Paths
+    base_path=f"results/{file_path}/{cfg.config_data.dataset}_{"iid" if cfg.config_data.iid else "non_iid"}" # NOTE: this simplifies and works for chaining as well
+    os.makedirs(f"{base_path}/",exist_ok=True) 
+    # string = deepcopy(cfg.base_path.format(algorithm=file_path, dataset=cfg.config_data.dataset, iidness=iid))
+    # cfg.base_path = base_path
     
-    if not os.path.exists(metpath):
-        os.mkdir(metpath)
-    if not os.path.exists(figpath):
-        os.mkdir(figpath)
-    if not os.path.exists(gephipath):
-        os.mkdir(gephipath)
+    # Data collection types:
+    [gephipath,metpath,figpath]=[f"{base_path}/{folder}/" for folder in ("gephis","metrics","figures")]
+    os.makedirs(gephipath, exist_ok=True)  #gephi path
+    os.makedirs(metpath, exist_ok=True) #metric path
+    os.makedirs(figpath, exist_ok=True) #figure path
 
+    ### NOTE: Run  ##############################
     print(colorama.Fore.MAGENTA+ f'{algorithm} algorithm'+ colorama.Style.RESET_ALL)
-    ###NOTE: Run
     for server_round in range(cfg.num_rounds):
         if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.9345:
             break
@@ -95,15 +88,15 @@ def cloud(cfg:DictConfig, algorithm):
 
         NETWORK.run_global_round_setup_steps(server_round, threshold=THRESHOLD)
 
-        if server_round == 0 and algorithm != "star" and SAVE_FIGURES:
+        if server_round == 0 and algorithm != "Star" and cfg.save_figures:
             CLASS_DIST["Starting Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
 
         DATA[server_round]={}
         ap_avg_state_dict = []
 
         # Distribution + Aggregation Cost
-        if (algorithm == "star"):
-            print("Star Costs TOO much")
+        if (algorithm == "Star"):
+            algorithm=algorithm.lower()
             NETWORK.calculate_server_distribution_aggregation_cost(mode="star")
             NETWORK.calculate_server_distribution_aggregation_cost(mode="star") # 2x for agg and distribution
         else:
@@ -112,20 +105,12 @@ def cloud(cfg:DictConfig, algorithm):
 
         start_time = time.time()
         for aggr_round in range(cfg.aggregation_rounds):
-
-            # TODO: DELETE / Moved this below because star doesn't really plot anything anyway
-            # if SAVE_RESULTS:
-            #     os.makedirs(figpath, exist_ok=True)
-            #     NETWORK.plot_communities(spring=True)
-            #     plt.title(f"Round {server_round} Communities")
-            #     plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
-            #     #TODO: check on making GEPHI files
             
-            if (algorithm != "star"):
+            if (algorithm.lower() != "star"):
                 NETWORK.calculate_ap_distribution_aggregation_cost()
                 NETWORK.calculate_ap_distribution_aggregation_cost() # 2x for agg and distribution
                 
-                if SAVE_RESULTS:
+                if cfg.save_results:
                     os.makedirs(figpath, exist_ok=True)
                     os.makedirs(gephipath, exist_ok=True)
 
@@ -145,6 +130,7 @@ def cloud(cfg:DictConfig, algorithm):
             
             state_dict_map = {}
             print(f'aggr_round: {aggr_round+1}')
+
             if aggr_round == 0:
                 state_dict_map = {i: network_model.state_dict() for i in range(cfg.num_clients)}
             else :
@@ -152,7 +138,6 @@ def cloud(cfg:DictConfig, algorithm):
                     for AP, members in NETWORK.ap_member_map.items()
                     for member in members
                 }
-
             pool = ThreadPoolExecutor(max_workers=WORKERS)
             futures = [
                 pool.submit(local_train, i, Net(num_classes, input_len), trainloaders[i], validationloaders[i],
@@ -167,27 +152,35 @@ def cloud(cfg:DictConfig, algorithm):
 
             NETWORK.map_results_to_files(results)
             ap_avg_state_dict = NETWORK.run_local_aggregation_round()
-            if (algorithm == "star"):
-                break # No additional steps needed
-            DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, validationloaders, device, WORKERS, input_len)
+            
+            if (algorithm.lower() == "star"): 
+                NETWORK.calculate_server_round_cost(star=True)
+                break  
+            else:
+                DATA[server_round][aggr_round]=update_ap_metrics(ap_avg_state_dict, validationloaders, device, WORKERS, input_len)
+                NETWORK.calculate_server_round_cost(star=False)
 
         net_state_dict = aggregate_params(list(ap_avg_state_dict.values()))
 
-        #NOTE: Globally Evaluate
+        #NOTE: Global Evaluations
         network_model.load_state_dict(net_state_dict)
         end_time = time.time()
         g_loss, g_accuracy = test(network_model, testloader, device)
+        print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy, "Cost: ", NETWORK.server_round_costs[-1],"\n"+colorama.Style.RESET_ALL)
+        
         DATA["cloud"]["losses"].append(g_loss)
         DATA["cloud"]["accuracies"].append(g_accuracy)
         DATA["cloud"]["Wall_Clock"].append(end_time-start_time)
-        print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy,"\n"+colorama.Style.RESET_ALL)
 
-    DATA["total_run_cost"] = NETWORK.total_cost
-    if algorithm != "star" and SAVE_FIGURES:
+    DATA["total_run_cost"] = NETWORK.TOTAL_COST
+    DATA["server_round_costs"] = NETWORK.server_round_costs
+    
+    if (algorithm.lower() != "star") and cfg.save_figures:
         CLASS_DIST["Ending_Communities"] = get_community_class_distributions(trainloaders, NETWORK.ap_member_map)
-    print(f"{algorithm } cost ", NETWORK.total_cost)
-    #print(CLASS_DIST)
-    if SAVE_RESULTS:
+    
+    print(f"{algorithm } cost ", NETWORK.TOTAL_COST)  #print(CLASS_DIST)
+    
+    if(cfg.save_results):
         lgth=len(os.listdir(f"{metpath}/"))
         with open(f"{metpath}/run_{lgth}_{SUFFIX}.json", "w") as file:
             json.dump(DATA, file, indent=4)
@@ -204,6 +197,7 @@ def run_models(cfg:DictConfig):
 
     for algorithm in algorithms_to_run:
         cloud(cfg, algorithm)
+
 
 
 if __name__ == "__main__":
