@@ -9,7 +9,7 @@ from typing import List
 from scipy.stats import uniform
 from tqdm import tqdm
 
-from deprecate.client import test
+# from deprecate.client import test
 import pandas as pd
 import numpy as np
 from collections import Counter

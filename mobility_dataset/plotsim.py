@@ -1,23 +1,24 @@
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-# import geopandas as gpd #NOTE: dont need this yet
+import geopandas as gpd
 from matplotlib.animation import FuncAnimation
-# import osmnx as ox #NOTE: or this
+import osmnx as ox
 import matplotlib.image as mpimg
 
 # Choose Hours
 START_HOUR=8
 STOP_HOUR=19
+MAPIMG='austin_map.png'
+ASPECT=688/1160
+
+# Mohawk Box
+BBOX = [-97.8395, -97.6819, 30.1961, 30.3511]
 
 
-def load_austin_screenshot(ax):
-
-    img = mpimg.imread('austin.png')
-
-    # Display the image
-    ax.imshow(img, extent=[-98.5, -97., 29, 31])  # Adjust the extent based on your map bounds
-
+def load_austin_screenshot(ax):  # 1160 × 688 (aspect)
+    img = mpimg.imread(MAPIMG)
+    ax.imshow(img, aspect=ASPECT, extent=[BBOX[0],BBOX[1], BBOX[2], BBOX[3]])
 
 def plot_hour(datehour,logs,ax):
     active_count=0
@@ -30,12 +31,8 @@ def plot_hour(datehour,logs,ax):
             which.append(k)
         except (KeyError):
             continue
-        if (k>80) or (k<70):
-            continue
-        # print("coords: ", row['geolong'], row['geolat'])
         scatters.append(ax.scatter(row['geolong'], row['geolat'], c='blue', label=row['id'], alpha=0.7))
         labels.append(ax.annotate(int(row['id']), (row['geolong'], row['geolat']), textcoords="offset points", xytext=(0,5), ha='center'))
-    # print(f"{datehour}, # actually active : {active_count}, # appeared in the dataset {len(which)}")
     ax.set_title(f"{datehour} Positions")
     return scatters,labels
 
@@ -43,41 +40,23 @@ def plot_all_hours(logs):
     
     start_date=logs[0].index[0]
     end_date=logs[0].index[-1]
-    fig,ax=plt.subplots(figsize=(12, 8))
-    # load_austin_screenshot(ax)
-    xmin,xmax=logs[0]['geolong'].min(),logs[0]['geolong'].max()
-    ymin,ymax=logs[0]['geolat'].min(),logs[0]['geolat'].max()
-    ax.set_xlim(xmin - .5, xmax + .5)
-    ax.set_ylim(ymin - .5, ymax + .5)
+    _,ax=plt.subplots(figsize=(12, 12*(ASPECT)))
+    load_austin_screenshot(ax)
+    ax.set_xlim(BBOX[0],BBOX[1])
+    ax.set_ylim(BBOX[2], BBOX[3])
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
-    ax.grid()
-    # plt.axhline(0, color='black', lw=0.5, ls='--')  # Optional: horizontal line at y=0
-    # plt.axvline(0, color='black', lw=0.5, ls='--')  # Optional: vertical line at x=0
-    
-    for (n,datehour) in enumerate(pd.date_range(start=start_date, end=end_date,freq="h").tolist()):
+
+    for (n,datehour) in enumerate(pd.date_range(start=start_date, end=end_date,freq="H").tolist()):
         if datehour.hour < START_HOUR or  (datehour.hour > STOP_HOUR):
             continue
         scatters,labels=plot_hour(datehour,logs,ax)
-        plt.pause(.25)
+        plt.pause(.20)
         for lbl,scatter in zip(scatters,labels):
             scatter.remove()  # Remove each scatter from the axes
             lbl.remove()
-
         if n>200: 
             break
-
-def animate_nx_community_plots():
-    return
-
-
-
-## NOTE:
-# Device 76 is not very mobile ( only 5 points from this device)
-
-# Based on the Folium Pictures -- this data is all the way in like separate cities -- Austin isn't relaly beyond latittdue 30.3
-# TODO (?) Pick new devices based on this ? Top 100 and they also have to be inside the boundaries ??
-
 
 if __name__ == "__main__":
     logs={}
@@ -90,4 +69,3 @@ if __name__ == "__main__":
             continue
 
     plot_all_hours(logs)
-
