@@ -1,107 +1,25 @@
-# TOLAND
-Adaptive Topology structures for Federated Learning
+# "TOLAND": Adaptive Topology structures for Mobile Federated Learning
 
 
-## Test Scripts
-- Can Run "cloud_template.py" -- set different algorithm configs to test the full pipeline
-- Can Run "mobility_plotter.py" to playback device movements ( austin background map is still WIP)
-
-ERROR (WIP)
-- NOTE: see screenshot -- still an error on cosine algorithm, round 1 worked fine but round 2 failed with DataLoader worker (pid(s) 12943) exited unexpectedly. This only happened today in the new strucutre with file lookups
-![worker failed](cosine_algorithm_error.png)
-
-## Plot Training Curve
-run: 
-    `python results/plotter.py path_to_results_file.json`
-
-Some Sample Results So Far (with MNIST)
-- Mobility + Preferential ScaleFree
-    `python results/plotter.py results/baselines/scalefree/metrics/adaptive_mnist_iid.json`
-- Mobility + Rewire ScaleFree
-    `python results/plotter.py results/baselines/scalefree/metrics/iid/run_0__TEST.json`
+![geo_bbox](mobility_dataset/austin_map.png)
 
 
-- No Mobility + ScaleFree
-    `python results/plotter.py results/baselines/scalefree/metrics/adaptive_mnist_iid.json`
-- No Mobility + Cosine Sim
-    `python results/plotter.py results/proxpref/metrics/iid/run_0__TEST.json`
+## Structure:
+- cloud_v2.py : runs the project, based on config inputs. Also is the basic template of "Mobile Hierarchical FL" -- it calls custom algorithms stored in "netsim"
+- mobile_dataset: To see how we creted mobility datasets check `mobility_dataset.' A visualization is included there
+- configs :  Includes single config file we use to call various algorithms or cases
+- netsim : this is where we store our network simulation + custom FL algorithms
+    - basenetwork ,  basealgorithm include basic templates for running hierarchical FL
+    - milestone2 contains most of the relevant algorithms
+    - milestone1 is legacy and milestone3 is a "futre work" algorithm
+- plots_and_analysis:
+    - includes final data put into the report
+    - also includes our code for generating plots
+- demo_modularity_concept.py  -- runs a visulization of how this "future cpncept" would work
+- utils.py and data_prepare contains most of the ML side of things 
 
 
-## Dec 9th Run Notes:
+![curves](plots_and_analysis/report/milestone_3_training_curves.png)
 
-COLLECT for Cost Metrics
-- DPP: RUN 3
-- STAR: 
-- COSINE: 
-- PPA: 
-- MOD-DPP(?)
+![costs](plots_and_analysis/report/cost_metric_comparisons.png)
 
-
-
-
-
-
-## Changes:
-
-### *NetSim Folder*
-- Network Class
-    - Purpose is to be a coordinator between:
-        - (1) Mobility Sim 
-        - (2) Network Communication Cost 
-        - (3) Device Activity (logs devices) 
-        - (4) Training Loop/Progress 
-        - (5) Plotting Utilities
-
-    - Stores a list of Device Objects, which used to store copies of models
-        - Change we discussed: get rid of device models to instead point to files where they keep their weights 
-        - Therefore the Device object is a conveniences data structure to store some meta data for coordinating (i.e. path to its parameters, id, possibly a pointer to it's current access point, route to its AP, etc.)
-        - Might also add some methods at Device level like "load_model_parameters()" but this could be done outside too
-- Algorithm
-    - Currently extends the Network class to instantiate the different custom policies including: ScaleFree Baseline & Cosine Similarity
-    - There are some common mehthods defined at Algorithm level
-    - Also stores a map of AP: [ list of members ] which could be dynamic
-
-- Customs
-    - Extend Algorithm
-    - Would be nice for a common interface (TODO) i.e. each custom algorithm must implement two callable methods:
-        - "global_round" 
-        - "local_round"
-
-
-Lastly all the plotting stuff is stored in this folder right now. Don't worry too much about that. I'll see if I can maybe separate that out into a totally separate process which would allow us to clean up some things.
-
-For example "reset_colors()" is purely for visualizing
-
-### Results Folder:
-- Structure changed -- check to see the difference
-
-
-### Device Movements
-- Comes from processing the FourSquare data
-- These files store the full simulated movements of devices 1 to 100 
-- Date Range: 5/10 to 5/20/2020
-
-
-
-
-
-## MileStone 2 Efforts
-- Implement Dynamics using the mobility (mohawk) dataset
-    - Allen recommended stitching together multiple days of data -- TODO
-
-- "Static" Baselines (results without device mobility)
-- IID Tests
-    - Star Topology -- 100 devices -- DONE
-    - Scalefree -- 5 seeds same topology on 100 devices -- DONE
-    - Scalefree Alternating -- TODO 
-    - Proximity + Cosine Comparison -- TODO
-
-- Non-IID Tests (build a way to visualize this ?)
-    - Star Topology -- 100 devices -- TODO
-    - Scalefree -- 5 seeds same topology on 100 devices --  TODO
-    - Scalefree Alternating - TODO
-
-- CIFAR Data still to do (better computing resources needed ?)
-
-- Equations for Cost of Communication -- TODO
-    - distance^2 currently being used
