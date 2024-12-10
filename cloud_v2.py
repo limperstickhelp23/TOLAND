@@ -172,6 +172,7 @@ def cloud(cfg:DictConfig, algorithm):
         DATA["cloud"]["accuracies"].append(g_accuracy)
         DATA["cloud"]["Wall_Clock"].append(end_time-start_time)
 
+    print(NETWORK.server_round_costs)
     DATA["total_run_cost"] = NETWORK.TOTAL_COST
     DATA["server_round_costs"] = NETWORK.server_round_costs
     

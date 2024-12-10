@@ -31,7 +31,7 @@ from torchvision.transforms import Compose, Normalize, ToTensor
 import torch
 from omegaconf import DictConfig
 
-from netsim.milestone1 import Device
+from netsim import Device
 
 
 ###NOTE: CLIENT MODELS

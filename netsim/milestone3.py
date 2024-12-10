@@ -69,19 +69,19 @@ class ModularDPP(Algorithm):
         
         return np.min(sg_costs)
 
-    def run_global_round_setup_steps(self, round=0, threshold=10, plot=False):
+    def run_global_round_setup_steps(self, round=0, threshold=10, plot=False, saveplot=False):
         
         self.reset_cost_collection()
         self.update_coordinates(round)
         self.generate_distances() # NOTE: important to have access to distances at every round
-        self.run_linking_algorithm(round_num=round, threshold=self.threshold,plot=plot)
+        self.run_linking_algorithm(round_num=round, threshold=self.threshold,plot=plot,saveplot=saveplot)
         # self.run_community_division_step(round_num=round,plot=plot)
 
     def run_local_aggregation_round(self, num_communication_rounds=3):
         return super().run_local_aggregation_round()
 
     
-    def run_linking_algorithm(self, round_num=0, threshold=0.5,plot=False):
+    def run_linking_algorithm(self, round_num=0, threshold=0.5,plot=False,plotpause=1.5,saveplot=False):
         """ NOTE: See picture. I think running betweeness is inherently inefficient due to the clustered
             layout of real world mobility. We want better spreading out of nodes. Either:
 
@@ -94,14 +94,18 @@ class ModularDPP(Algorithm):
                 # self.select_access_points_on_betweenness(switch=False)
         """
 
-        def plot_topology(G : nx.graph, pause=1.5, edge_weights=.2):
+        def plot_topology(G : nx.graph, pause=plotpause, edge_weights=.2, counter=0):
             nx.draw(G, with_labels=True,font_color="white",pos=self.get_positions(),width=edge_weights,node_size=1)
             for (ii,(k,v)) in enumerate(self.ap_member_map.items()):
                 cluster=list(v)
                 cluster.remove(k)
                 nx.draw_networkx_nodes(G,nodelist=cluster, node_color= COLORS[ii], pos=self.get_positions())   
             nx.draw_networkx_nodes(G,nodelist=self.curr_apoints,node_color="black",node_shape='*',node_size=800,pos=self.get_positions())
-            plt.draw(),plt.pause(pause),plt.cla()
+            if (saveplot and plot):
+                plt.savefig(f"mod_dpp_demo_{round_num}_{counter}.png")
+            else:
+                plt.draw(),plt.pause(pause)
+            plt.cla()
 
 
         ## NOTE : Instead Try Using K-Means for Distance
@@ -130,7 +134,7 @@ class ModularDPP(Algorithm):
         #     print(k, " ", v)
 
         if (plot):
-            plot_topology(self.NXG1)
+            plot_topology(self.NXG1,counter=1)
     
         
         ## NOTE: Second Step (Nested Definition) Divides Communities Into 2 Additional Sub-Communities
@@ -200,8 +204,8 @@ class ModularDPP(Algorithm):
                         self.NXG2.add_edge(k,n, weight=self.D[k,n])
 
             if (plot):
-                plot_func(self.NXG1)
-                plot_func(self.NXG2, pause=1 , edge_weights=.2)
+                plot_func(self.NXG1,counter=2)
+                plot_func(self.NXG2, pause=1 , edge_weights=.2,counter=3)
             
             # Extract all edge weights as a list
             weights = [data['weight'] for _, _, data in self.NXG2.edges(data=True)]
@@ -209,158 +213,12 @@ class ModularDPP(Algorithm):
             # Sum the weights
             self.level_2_total_edge_cost = sum(weights)
 
-            run_community_division_step(round_num=round_num,plot=plot)
+
+        run_community_division_step(round_num=round_num,plot=plot)
             
-
-            #____ Possible TODO______________
-            #(1) NOTE -- for visualizing community structure
-            #(2) NOTE -- compute the cost of the modularity algorithm (at least just for communications)
-            #(3) NOTE: we will treat it as if it is an additional agg round basically
-            #(4) NOTE -- use a different cosim function (like DPP algorithm above)
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-##NOTE: MARK FOR SCRATCH  -- These are All Old Ideas
-#-------------------------------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------------------------------
-###NOTE: Other Ideas | Can Ignore | Prototype New Ideas Etc. 
-# class EfficientLessCentralizedServer(Algorithm):
-#     def __init__(self,num_devices=20):
-#         super().__init__(n=num_devices) 
-#         self.mobile=False   
-#         self.ap_color="black"
+        #____ Possible TODO's ______________
+        #(1) NOTE -- for visualizing community structure
+        #(2) NOTE -- compute the cost of the modularity algorithm (at least just for communications)
+        #(3) NOTE: we will treat it as if it is an additional agg round basically
+        #(4) NOTE -- use a different cosim function (like DPP algorithm above)
     
-#     def rewire_round(self,round_num=0):
-#         indices=[i for i in range(self.N)]
-#         clusters=random.sample([i for i in range(self.N)], self.num_apoints)
-#         indices=list(set(indices)-set(clusters))
-#         self.curr_apoints=list(clusters)
-#         memberships={}
-
-#         for dvc in indices:
-#             head=random.sample(clusters,1)[0]
-#             memberships[dvc]=head
-#             self.routes[dvc]=[dvc,head]
-#             self.A[dvc,head]=self.A[head,dvc]=1
-        
-#         self.set_custom_topology(self.A)
-#         self.reset_colors()
-#         self.attribute_communities(memberships)
-
-# class MinSpanTreeServer(Algorithm):
-#     def __init__(self,num_devices=20,λ=10):
-#         super().__init__(n=num_devices,λ=λ)
-#         self.mobile=True
-#         self.weight="weight"
-#         self.save=False
-#         self.outdir="mst_tree_updates/"
-#         self.method="fully_connected"
-    
-#     def rewire_round(self,round_num=0):
-
-#         if self.method == "fully_connected":
-#             A=np.ones([self.N,self.N])
-#             np.fill_diagonal(A, 0)
-#             self.set_custom_topology(A)
-#         elif self.method == "proximity":
-#             self.build_proximity_graph()
-#             self.set_custom_topology(self.A)
-#         else:
-#             print("method not recognized")
-#             return
-    
-#         self.set_custom_topology(
-#             nx.adjacency_matrix(
-#                 nx.minimum_spanning_tree(self.NXG1,weight=self.weight,algorithm="kruskal")
-#             )
-#         )
-#         # self.generate_assignments(weight=self.weight)
-#         self.attribute_communities()
-#         # if (save):
-#         #     self.assignments_to_yaml(os.path.join(folder,f"round_{round_num}.yaml"))
-
-# class MaxEntropyServer(Algorithm):
-#     def __init__(self,num_devices=20):
-#         super().__init__(n=num_devices)   
-
-# ## NOTE: Add New Algorithms here
-# class MyNewAlgorithm(Algorithm):
-#     def __init__(self,num_devices=20):
-#         super().__init__(n=num_devices)   
-    
-#     def rewire_round(self):
-#         return
-
-
-
-
-#   def self_assign(self,max_iters=10):
-#         """
-#         NOTE: FIRST VERSION  -- New version usese comparisons to community models instad.
-       
-#         This works ok except sometimes the order can affect it. 
-#         So for example (0,3,6,9) are all supposed to be red but 9 is initially yellow.
-#         Then 3 was similar to 9 so was pulled into yellow camp and brought 6 with it. 
-
-#         This is at the first round. To get around this, I hope doing community aggregations will help.
-
-#         Another way would be to try to assign them to the most similar access point. However they may not always be close
-#         to the access point with the best similarity
-#         """
-
-#         changes=1000
-
-#         for _ in range(max_iters):
-#             if changes < 2:
-#                 break
-#             else:
-#                 changes = 0
-            
-
-#             for dobj in self.device_list:
-                
-#                 dvc=dobj.id
-#                 if dvc in self.curr_apoints:
-#                     continue # NOTE: access points stay fixed, I think this will be key to algorithm but could be wrong
-                
-#                 ## Similarity with "self" -- community model
-#                 max_cosim=compute_device_to_community_cosim(self.device_list[dvc],self.device_list[dvc])
-#                 max_nbr,max_color=dvc,self.device_list[dvc].color
-
-#                 for nbr in self.NXG1.neighbors(dvc):
-
-#                     cosim=compute_device_model_cosim_metric(self.device_list[dvc], self.device_list[nbr])
-#                     if cosim > max_cosim:
-#                         max_cosim,max_nbr,max_color=cosim,nbr,self.device_list[nbr].color
-#                         self.device_list[dvc].parent_point = self.device_list[nbr].parent_point
-
-#                 # print(f"match? {dvc} : {max_nbr}, {max_cosim}")
-#                 if max_color != self.device_list[dvc].color:
-#                     changes += 1
-                
-#                 self.device_list[dvc].color = max_color   
-#         # TODO/NOTE: load current access points from devices -- shoul dbe its own function  
-#         # Re-Set Communities after Organization
-#         self.assign_communities()
-#         return

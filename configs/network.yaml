@@ -1,9 +1,9 @@
 # star, scalefree , prox_preferential , cosine , DPP (Dynamic ProxPref), ModDPP
 chain_algorithms: #run multiple algorithms in succession of order listed
-  # - Star
-  # - DPP
-  # - PPA
-  # - Cosine
+  - Star
+  - DPP
+  - PPA
+  - Cosine
   - ModularDPP
 plot_colormap: nipy_spectral   # turbo, jet, viridis nipy_spectral brg, gist_earth
 save_results: True
@@ -14,9 +14,8 @@ save_figures: False
 
 base_path: "results/{algorithm}/{dataset}_{iidness}"
 
-
-num_rounds: 1   #35 
-num_clients: 10  #100
+num_rounds: 20      # 35 
+num_clients: 100    # 100
 aggregation_rounds: 2 # defaults to 1 if algorithm is 'star'
 
 #####################
@@ -40,7 +39,4 @@ config_fit: # a config that each client will receive
   loss: 'fedmax' # 'fedavg', 'fedprox', 'fedmax'
   beta: 100 # 0: fedAvg;  1, 10, 100, 1000..: fedMax; 0.001-2 fedProx;
 
-
-defaults:
-  - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
 

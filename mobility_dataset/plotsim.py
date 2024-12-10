@@ -2,21 +2,21 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import geopandas as gpd
-from matplotlib.animation import FuncAnimation
-import osmnx as ox
+# from matplotlib.animation import FuncAnimation
 import matplotlib.image as mpimg
+from pathlib import Path
 
 # Choose Hours
 START_HOUR=8
 STOP_HOUR=19
 MAPIMG='austin_map.png'
-ASPECT=688/1160
+ASPECT=688/1160 # NOTE: set manually
+ROOT=Path(__file__).resolve().parent.parent
+MOVEMENTS=os.path.join(ROOT,"devices/movements")
+BBOX = [-97.8395, -97.6819, 30.1961, 30.3511]  #NOTE: Same as MOHAWK Box
 
-# Mohawk Box
-BBOX = [-97.8395, -97.6819, 30.1961, 30.3511]
 
-
-def load_austin_screenshot(ax):  # 1160 × 688 (aspect)
+def load_austin_screenshot(ax):  
     img = mpimg.imread(MAPIMG)
     ax.imshow(img, aspect=ASPECT, extent=[BBOX[0],BBOX[1], BBOX[2], BBOX[3]])
 
@@ -61,11 +61,10 @@ def plot_all_hours(logs):
 if __name__ == "__main__":
     logs={}
     for n in range(100):
-        df=pd.read_pickle(f"device_movements/log_{n}.pkl")
+        df=pd.read_pickle(f"{MOVEMENTS}/log_{n}.pkl")
         try:
             logs[n]=df[(df.index.hour >= START_HOUR) & (df.index.hour <= STOP_HOUR)]
         except:
             print(n, " failed")
             continue
-
     plot_all_hours(logs)

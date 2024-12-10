@@ -14,7 +14,13 @@ from typing import List
 from pathlib import Path
 import os
 
+
+### NOTE: LEGACY FILE -- Most of this is updated/extended in milestones 2 and 3
+## Just kept it here for completeness as it includes HW1 code we used for making basic topologies: Random,  Scale Free, etc. 
+
+
 # NOTE: manual color map | use built-ins from matplotlib
+ROOT=Path(__file__).resolve().parent.parent
 COLORS = [
     "red", "blue", "gold", "green", "lavender", "magenta", "orange", "grey", "firebrick","teal",
     "tab:blue", "darkgreen", "brown", "indigo", "black", "bisque", "mediumturquoise", "darkviolet",
@@ -28,7 +34,6 @@ COLORS = [
     "lightgrey", "mistyrose", "moccasin", "navajowhite", "oldlace", "palegreen", "palevioletred", "seashell",
     "springgreen", "tan", "wheat", "whitesmoke"
 ]
-ROOT=Path(__file__).resolve().parent.parent
 
 # Utilities
 def get_sampled_colors(n, colormap='viridis'):
@@ -58,7 +63,171 @@ def aggregate_params(model_params):
 
     return averaged_state_dict
 
-class Device:
+# TODO : Milestone 1 Convenience Based on Homework 1 -- Used for making ER and Scale Free and Small World Graphs
+class GraphGenerator:
+    """ 
+        Build adjaceny matrix and save to a txt file.
+        This aids in solving question 5 from homework 1.
+    """
+    def __init__(self,n=10):
+        self.N=n
+        self.M=0
+        self.deg_pdf={}
+        self.A = np.zeros([n,n], dtype=np.int16)
+        for ii in range(n):
+            self.deg_pdf[ii]=0.0
+
+        return
+
+    def random_pair(self):
+        return( np.random.randint(self.N),  np.random.randint(self.N))
+
+    def update_deg_dist(self):
+        prob=lambda ii: self.get_degree(ii)/self.M/2
+
+        for (k,v) in self.deg_pdf.items():
+            self.deg_pdf[k]=prob(k)
+            
+        # print("check valid pdf: ", sum(self.deg_pdf.values()))
+
+    def add_edge(self,i,j):
+        if self.A[i,j] == 1: # Already added
+            return
+        if (i != j): # No Self Loops in these Models
+            self.M += 1
+            self.A[i,j] = self.A[j,i] = 1
+        return
+    
+    def reset(self):
+        self.A = np.zeros([self.N,self.N])
+        self.M = 0
+        return "Poof"
+    
+    def scale_free(self,num_seeds=5):
+        # clear/reset adjacency
+        self.reset()
+        nodes=set([i for i in range(self.N)])
+        seeds,sampler = [],[]
+        
+        # seed
+        for _ in range(num_seeds):
+            seed=random.sample(list(nodes),k=1)[0]
+            nodes.remove(seed)
+            seeds.append(seed)
+        print(seeds)
+        
+        # randomly connect
+        for _ in range(np.random.randint(12,24)): # num pulls=np.random.randint(12,24)
+            (i,j)=random.sample(seeds,k=2)
+            self.add_edge(i,j),sampler.append(i),sampler.append(j)
+            # NOTE: i think using sampler mehthod is a bit simpler, I can check pdfs at the end (TODO)
+
+        while (nodes):
+            i=nodes.pop()
+            candidates=random.sample(sampler,k=num_seeds) # connect to at most num_seeds
+            for j in candidates:
+                self.add_edge(i,j)
+            
+            if self.get_degree(i) < 1: #NOTE: ensure everybody gets a connection
+                nodes.append(i)
+        self.update_deg_dist()
+    
+    def erdos_renyi(self,p=0.05,num_edges=100, allow_isolates=True):
+        self.M=0
+        if (allow_isolates):
+            while self.M < num_edges:
+                self._random_edge(p=p)
+        else:
+            while (self._check_isolates()):
+                self._random_edge(p=p)      
+        self.update_deg_dist()
+
+    def _random_edge(self, p=.05):
+        (i,j)=self.random_pair()
+        if (i==j) or (self.A[i,j] == 1):
+            return
+        if np.random.uniform() <= p:
+            self.A[i,j] = self.A[j,i] = 1
+            self.M += 1
+    
+    def _check_isolates(self):
+        return np.any(np.sum(self.A,axis=1) == 0)
+        
+    def braid_lattice(self, step=2):
+        self.reset()
+        row=np.zeros(self.N)
+        row[0:2*step+1]=1
+        row[step]=0
+        self.A=np.roll(
+            np.stack([np.roll(row,k) for k in range(self.N)]), step,axis=0
+        )
+        self.M = np.sum(self.A)
+    
+    def remove_edge(self,i,j):
+        self.M -= 1
+        self.A[i,j] = self.A[j,i] = 0
+        
+    def watts_strogatz(self,p=.001,k=2):
+        """
+            p: rewiring probability
+            k: steps in initial braid configuration (degree is actually 2k)
+        """
+        self.braid_lattice(step=k)
+        nodes=[i for i in range(self.N)]
+
+        # rewiring process
+        for i in range(self.N):
+            edges = list(np.nonzero(self.A[i,:])[0])
+            complement = list(set(nodes)-set(edges)-set([i]))
+            
+            # NOTE: checking complement logic
+            # for k in range(self.N):
+            #     if k not in set(edges).union(complement):
+            #         print(k)
+
+            for e in edges:
+                if np.random.rand() < p: 
+                    new=random.sample(complement,1)[0]
+                    # "edge" case, already connected then leave as is
+                    if (self.A[i,new] == 1):
+                        continue
+                    else:
+                        self.add_edge(i,new)
+                        self.remove_edge(i,e)
+                
+        # double ensure edge count correct
+        self.M=np.sum(self.A)//2
+        return    
+
+    def rank_nodes(self):
+        return #TODO
+
+    def degree_plot(self):
+        return #TODO
+
+    def get_degree(self,n):
+        return np.sum(self.A[n,:])
+    
+    def write_file(self,fname="adjacency.txt"):
+        np.savetxt(fname,self.A,fmt='%d')
+    
+    def to_adjacency_table(self):
+        table={}
+        for row in range(len(self.A)):
+            neighbors = [int(n) for n in list(np.nonzero(self.A[row,:])[0])] #NOTE: annoying
+            table[int(row)]=neighbors
+        return table
+
+    def edges_to_json(self,fname="edges.json"):
+        table=self.to_adjacency_table()
+        with open('er_sample.json', 'w') as fp:
+            json.dump(table, fp)
+
+
+
+
+
+class DeviceM1:
     def __init__(self,id=0,num_classes=10, x_max=100,y_max=100, λ=10,type=[4,5]):
         
         self.id=id
@@ -100,8 +269,8 @@ class Device:
         self.x,self.y=row['geolat'],row['geolong']
         return
     
-#NOTE: Device Level Calcualtions
-# def compare_device_cosines_new(d1: Device, d2: Device): #(Pass Device Objects)
+#NOTE: DeviceM1 Level Calcualtions
+# def compare_device_cosines_new(d1: DeviceM1, d2: DeviceM1): #(Pass DeviceM1 Objects)
 #     """TODO: test with training loop -- 
 #     """
 #     state_dict_1=d1.get_model()
@@ -111,17 +280,17 @@ class Device:
 #     print(state_dict_1.keys())
 #     return 0
 
-def Euclidean(d1:Device, d2:Device):
+def Euclidean(d1:DeviceM1, d2:DeviceM1):
         """NOTE: probably just rewrite this at the Network level to update distances every global round"""
         return np.sqrt(
             np.linalg.norm( np.array([d1.x,d1.y]) - np.array([d2.x,d2.y]))
     )
 
-class Network:
+class NetworkM1:
     def __init__(self,num_devices=10,num_classes=10,perceptual_map="nipy_spectral",threshold=10):
         
         self.N=num_devices # self.devices={}
-        self.device_list=[Device(i,num_classes=num_classes) for i in range(self.N)]
+        self.device_list=[DeviceM1(i,num_classes=num_classes) for i in range(self.N)]
         self.D = np.zeros([self.N,self.N]) #NOTE: not in use
         self.A = np.zeros([self.N,self.N])
         self.curr_apoints = []
@@ -143,16 +312,16 @@ class Network:
         self.reset_topologies()
 
         #NOTE: choose location of server or somehow otherwise compute the cost of talking to server
-        self.server=Device()
+        self.server=DeviceM1()
         self.server.x,self.server.y = 30.2994,-97.6858 # ATT tower on Manor Road
         self.TOTAL_COST = 0
 
-    def Euclidean(self,d1:Device, d2:Device):
+    def Euclidean(self,d1:DeviceM1, d2:DeviceM1):
         return np.sqrt(
             np.linalg.norm( np.array([d1.x,d1.y]) - np.array([d2.x,d2.y]))
         )
     
-    def server_distance(self, d1:Device):
+    def server_distance(self, d1:DeviceM1):
         return np.sqrt(
             np.linalg.norm( np.array([d1.x,d1.y]) - np.array([self.server.x,self.server.y]))
         )
@@ -186,7 +355,7 @@ class Network:
             self.colors[ap_color]=self.curr_apoints
         
     def init_server(self,pos=[0,0]):
-        self.server = Device()
+        self.server = DeviceM1()
         self.server.x = pos[0]
         self.server.y = pos[1]
         return
@@ -472,172 +641,3 @@ class Network:
     def calculate_ap_distribution_aggregation_cost(self):
         for (k,members) in self.ap_member_map.items():
             self.TOTAL_COST+=np.sum([self.Euclidean(self.device_list[k],self.device_list[m]) for m in members])
-
-
-
-
-
-
-
-
-
-
-# TODO : Deprectate this (??)
-class GraphGenerator:
-    """ 
-        Build adjaceny matrix and save to a txt file.
-        This aids in solving question 5 from homework 1.
-    """
-    def __init__(self,n=10):
-        self.N=n
-        self.M=0
-        self.deg_pdf={}
-        self.A = np.zeros([n,n], dtype=np.int16)
-        for ii in range(n):
-            self.deg_pdf[ii]=0.0
-
-        return
-
-    def random_pair(self):
-        return( np.random.randint(self.N),  np.random.randint(self.N))
-
-    def update_deg_dist(self):
-        prob=lambda ii: self.get_degree(ii)/self.M/2
-
-        for (k,v) in self.deg_pdf.items():
-            self.deg_pdf[k]=prob(k)
-            
-        # print("check valid pdf: ", sum(self.deg_pdf.values()))
-
-    def add_edge(self,i,j):
-        if self.A[i,j] == 1: # Already added
-            return
-        if (i != j): # No Self Loops in these Models
-            self.M += 1
-            self.A[i,j] = self.A[j,i] = 1
-        return
-    
-    def reset(self):
-        self.A = np.zeros([self.N,self.N])
-        self.M = 0
-        return "Poof"
-    
-    def scale_free(self,num_seeds=5):
-        # clear/reset adjacency
-        self.reset()
-        nodes=set([i for i in range(self.N)])
-        seeds,sampler = [],[]
-        
-        # seed
-        for _ in range(num_seeds):
-            seed=random.sample(list(nodes),k=1)[0]
-            nodes.remove(seed)
-            seeds.append(seed)
-        print(seeds)
-        
-        # randomly connect
-        for _ in range(np.random.randint(12,24)): # num pulls=np.random.randint(12,24)
-            (i,j)=random.sample(seeds,k=2)
-            self.add_edge(i,j),sampler.append(i),sampler.append(j)
-            # NOTE: i think using sampler mehthod is a bit simpler, I can check pdfs at the end (TODO)
-
-        while (nodes):
-            i=nodes.pop()
-            candidates=random.sample(sampler,k=num_seeds) # connect to at most num_seeds
-            for j in candidates:
-                self.add_edge(i,j)
-            
-            if self.get_degree(i) < 1: #NOTE: ensure everybody gets a connection
-                nodes.append(i)
-        self.update_deg_dist()
-    
-    def erdos_renyi(self,p=0.05,num_edges=100, allow_isolates=True):
-        self.M=0
-        if (allow_isolates):
-            while self.M < num_edges:
-                self._random_edge(p=p)
-        else:
-            while (self._check_isolates()):
-                self._random_edge(p=p)      
-        self.update_deg_dist()
-
-    def _random_edge(self, p=.05):
-        (i,j)=self.random_pair()
-        if (i==j) or (self.A[i,j] == 1):
-            return
-        if np.random.uniform() <= p:
-            self.A[i,j] = self.A[j,i] = 1
-            self.M += 1
-    
-    def _check_isolates(self):
-        return np.any(np.sum(self.A,axis=1) == 0)
-        
-    def braid_lattice(self, step=2):
-        self.reset()
-        row=np.zeros(self.N)
-        row[0:2*step+1]=1
-        row[step]=0
-        self.A=np.roll(
-            np.stack([np.roll(row,k) for k in range(self.N)]), step,axis=0
-        )
-        self.M = np.sum(self.A)
-    
-    def remove_edge(self,i,j):
-        self.M -= 1
-        self.A[i,j] = self.A[j,i] = 0
-        
-    def watts_strogatz(self,p=.001,k=2):
-        """
-            p: rewiring probability
-            k: steps in initial braid configuration (degree is actually 2k)
-        """
-        self.braid_lattice(step=k)
-        nodes=[i for i in range(self.N)]
-
-        # rewiring process
-        for i in range(self.N):
-            edges = list(np.nonzero(self.A[i,:])[0])
-            complement = list(set(nodes)-set(edges)-set([i]))
-            
-            # NOTE: checking complement logic
-            # for k in range(self.N):
-            #     if k not in set(edges).union(complement):
-            #         print(k)
-
-            for e in edges:
-                if np.random.rand() < p: 
-                    new=random.sample(complement,1)[0]
-                    # "edge" case, already connected then leave as is
-                    if (self.A[i,new] == 1):
-                        continue
-                    else:
-                        self.add_edge(i,new)
-                        self.remove_edge(i,e)
-                
-        # double ensure edge count correct
-        self.M=np.sum(self.A)//2
-        return    
-
-    def rank_nodes(self):
-        return #TODO
-
-    def degree_plot(self):
-        return #TODO
-
-    def get_degree(self,n):
-        return np.sum(self.A[n,:])
-    
-    def write_file(self,fname="adjacency.txt"):
-        np.savetxt(fname,self.A,fmt='%d')
-    
-    def to_adjacency_table(self):
-        table={}
-        for row in range(len(self.A)):
-            neighbors = [int(n) for n in list(np.nonzero(self.A[row,:])[0])] #NOTE: annoying
-            table[int(row)]=neighbors
-        return table
-
-    def edges_to_json(self,fname="edges.json"):
-        table=self.to_adjacency_table()
-        with open('er_sample.json', 'w') as fp:
-            json.dump(table, fp)
