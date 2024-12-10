@@ -23,8 +23,8 @@ aggregation_rounds: 2 # defaults to 1 if algorithm is 'star'
 # DATA PREPARE AND IID-ness
 config_data:
   num_classes: 10
-  input_len: 1 # CIFAR: 3  MNIST: 1
-  dataset: 'MNIST' # **Change input_len** 'MNIST', 'CIFAR10'
+  input_len: 3 # CIFAR: 3  MNIST: 1
+  dataset: 'CIFAR10' # **Change input_len** 'MNIST', 'CIFAR10'
   alpha: 0.15 # control how much iid needed in the dataset, lower the more non-iid.
   batch_size: 20
   num_partitions: null #Gets the same value as num_clients (do not change)
@@ -34,13 +34,11 @@ config_data:
 # DEVICE PARAMETERS
 config_fit: # a config that each client will receive
   num_classes: 10
-  lr: 0.01 # learning rate to use by the clients
+  lr: 0.01 # learning rate to use by the clients SGD: 0.01 ; Adam: 0.001
   momentum: 0.9 # momentum used by SGD optimiser on the client side
   epochs: 2 # number of training epochs each clients does in a fit() round
+  optimizer: 'SGD' # SGD or Adam
+  weight_decay: 0.0002 # for Adam only
   loss: 'fedmax' # 'fedavg', 'fedprox', 'fedmax'
   beta: 100 # 0: fedAvg;  1, 10, 100, 1000..: fedMax; 0.001-2 fedProx;
-
-
-defaults:
-  - neighbor_lists: random_weighted_05_50_5.yaml #Change file_name here
 

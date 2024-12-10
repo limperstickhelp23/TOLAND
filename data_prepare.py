@@ -10,35 +10,34 @@ from torchvision.transforms import Compose, Normalize, ToTensor
 from omegaconf import DictConfig
 
 
-def get_mnist(data_path: str = "~/TOLAND/data"):
+def get_mnist(data_path: str = "./data"):
 
     """Download MNIST and apply minimal transformation."""
 
     tr = Compose([ToTensor(), Normalize((0.1307,), (0.3081,))])
 
-    bool_ = not os.path.exists(os.path.join(data_path, 'MNIST', 'processed', 'training.pt'))
+    bool_ = not os.path.exists(os.path.join(data_path, 'MNIST'))
 
     trainset = MNIST(data_path, train=True, download=bool_, transform=tr)
     testset = MNIST(data_path, train=False, download=bool_, transform=tr)
     return trainset, testset
 
-def get_cifar10(data_path: str = "~/TOLAND/data"):
-    from shutil import rmtree
-    # Clear any existing CIFAR-10 datasets from the default location
+def get_cifar10(data_path: str = "./data"):
 
-    os.path.join(data_path, 'CIFAR10')
-    os.makedirs(data_path, exist_ok=True)
+    data_path = os.path.join(data_path, 'CIFAR10')
     tr = Compose([ToTensor(), Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
 
     bool_ = not os.path.exists(data_path)
+    if bool_:
+        os.makedirs(data_path, exist_ok=True)
 
-    trainset = CIFAR10(root=data_path, train=True, download=True, transform=tr)
-    testset = CIFAR10(root=data_path, train=False, download=True, transform=tr)
+    trainset = CIFAR10(root=data_path, train=True, download=bool_, transform=tr)
+    testset = CIFAR10(root=data_path, train=False, download=bool_, transform=tr)
 
     return trainset, testset
 
 
-def prepare_dataset(cfg : DictConfig, val_ratio: float = 0.1):
+def prepare_dataset(cfg : DictConfig, val_ratio: float = 0.05):
     """Prepare data loaders for each client and choose to non-iid or iid datasets"""
     Dataset = cfg.dataset
     num_partitions = cfg.num_partitions

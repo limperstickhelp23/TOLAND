@@ -26,6 +26,7 @@ def cloud(cfg:DictConfig, algorithm):
     cfg.config_data.num_partitions = cfg.num_clients
     cfg.save_figures = cfg.save_figures
     DATA,NETWORK={},None
+    DATA["algorithm"] = f'{algorithm} ({cfg.config_fit.loss}|{cfg.config_fit.optimizer})'
     DATA["cloud"]={"losses":[],"accuracies":[], "Wall_Clock":[], "server_round_costs": []}
     CLASS_DIST = {}
     SUFFIX = f"{cfg.config_data.dataset}"
@@ -68,7 +69,7 @@ def cloud(cfg:DictConfig, algorithm):
         NETWORK=Algorithm(num_devices=cfg.num_clients,num_classes=num_classes,threshold=THRESHOLD) # Some Default Behavior
 
     ## Set Up Paths
-    base_path=f"results/{file_path}/{cfg.config_data.dataset}_{"iid" if cfg.config_data.iid else "non_iid"}" # NOTE: this simplifies and works for chaining as well
+    base_path=f"results/{file_path}/{cfg.config_data.dataset}_{'iid' if cfg.config_data.iid else 'non_iid'}" # NOTE: this simplifies and works for chaining as well
     os.makedirs(f"{base_path}/",exist_ok=True) 
     # string = deepcopy(cfg.base_path.format(algorithm=file_path, dataset=cfg.config_data.dataset, iidness=iid))
     # cfg.base_path = base_path
@@ -80,7 +81,7 @@ def cloud(cfg:DictConfig, algorithm):
     os.makedirs(figpath, exist_ok=True) #figure path
 
     ### NOTE: Run  ##############################
-    print(colorama.Fore.MAGENTA+ f'{algorithm} algorithm'+ colorama.Style.RESET_ALL)
+    print(colorama.Fore.MAGENTA+ f'{algorithm} algorithm ({cfg.config_fit.loss}|{cfg.config_fit.optimizer})'+ colorama.Style.RESET_ALL)
     for server_round in range(cfg.num_rounds):
         if server_round > 0 and DATA["cloud"]["accuracies"][-1] >= 0.9345:
             break
@@ -113,11 +114,6 @@ def cloud(cfg:DictConfig, algorithm):
                 if cfg.save_results:
                     os.makedirs(figpath, exist_ok=True)
                     os.makedirs(gephipath, exist_ok=True)
-
-                    # if (cfg.save_figures):  # NOTE: not necessary because we can make plots from .gexf files
-                    #     NETWORK.plot_communities(spring=False)
-                    #     plt.title(f"Round {server_round} Communities")
-                    #     plt.savefig(figpath+f"{server_round}_{aggr_round}_{SUFFIX}.jpeg")
 
                     # Ensure Communities Passed as Integers:
                     for (n,members) in enumerate(NETWORK.ap_member_map.values()):
@@ -166,7 +162,7 @@ def cloud(cfg:DictConfig, algorithm):
         network_model.load_state_dict(net_state_dict)
         end_time = time.time()
         g_loss, g_accuracy = test(network_model, testloader, device)
-        print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy, "Cost: ", NETWORK.server_round_costs[-1],"\n"+colorama.Style.RESET_ALL)
+        print(colorama.Fore.LIGHTGREEN_EX+"\nCheck Round Loss: ", g_loss, ", Accuracy: ", g_accuracy, ", Cost: ", NETWORK.server_round_costs[-1],"\n"+colorama.Style.RESET_ALL)
         
         DATA["cloud"]["losses"].append(g_loss)
         DATA["cloud"]["accuracies"].append(g_accuracy)
