@@ -1,5 +1,8 @@
 # "TOLAND": Adaptive Topology structures for Mobile Federated Learning
 
+For holistic view of the project please refer the [research paper](F24_FL_on_Adaptive_Topologies.pdf)
+
+For a quick abstract view please refer to the [poster](Academic_Research_Poster.pdf)
 
 ![geo_bbox](mobility_dataset/austin_map.png)
 
